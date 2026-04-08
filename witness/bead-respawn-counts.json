@@ -1,10 +1,20 @@
 {
   "beads": {
+    "mm-c6o": {
+      "bead_id": "mm-c6o",
+      "count": 1,
+      "last_respawn": "2026-04-08T09:50:15.04045Z"
+    },
+    "mm-jzk": {
+      "bead_id": "mm-jzk",
+      "count": 1,
+      "last_respawn": "2026-04-08T09:49:31.059559Z"
+    },
     "mm-sq0": {
       "bead_id": "mm-sq0",
       "count": 3,
       "last_respawn": "2026-04-08T09:18:39.708475Z"
     }
   },
-  "last_updated": "2026-04-08T09:18:39.708477Z"
+  "last_updated": "2026-04-08T09:50:15.040453Z"
 }
