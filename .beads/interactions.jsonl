@@ -81,3 +81,6 @@
 {"id":"int-a887f6e9","kind":"field_change","created_at":"2026-04-08T10:11:05.288969Z","actor":"Felix Haendel","issue_id":"hq-wisp-ak70","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-564e8720","kind":"field_change","created_at":"2026-04-08T10:11:05.834965Z","actor":"Felix Haendel","issue_id":"hq-wisp-ka6s","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-68fbc43c","kind":"field_change","created_at":"2026-04-08T10:16:04.427429Z","actor":"Felix Haendel","issue_id":"hq-wisp-7ms6","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-0b4f9265","kind":"field_change","created_at":"2026-04-08T10:16:05.184477Z","actor":"Felix Haendel","issue_id":"hq-wisp-n14z","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-48edaa6d","kind":"field_change","created_at":"2026-04-08T10:21:04.445583Z","actor":"Felix Haendel","issue_id":"hq-wisp-45nj","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-20bbae88","kind":"field_change","created_at":"2026-04-08T10:26:14.646675Z","actor":"Felix Haendel","issue_id":"hq-wisp-bi2z","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
