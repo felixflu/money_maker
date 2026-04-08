@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os
 
+from app.routers import auth
+
 # Create FastAPI application
 app = FastAPI(
     title="Money Maker API",
@@ -15,6 +17,9 @@ app = FastAPI(
     docs_url="/docs" if os.getenv("ENV") != "production" else None,
     redoc_url="/redoc" if os.getenv("ENV") != "production" else None,
 )
+
+# Include routers
+app.include_router(auth.router)
 
 # Configure CORS
 app.add_middleware(
