@@ -14,6 +14,11 @@ from app.auth import (
     decode_token,
     get_user_by_email,
     create_user,
+    create_password_reset_token,
+    get_password_reset_token,
+    is_token_valid,
+    mark_token_used,
+    update_user_password,
 )
 from app.schemas import (
     UserCreate,
@@ -21,6 +26,9 @@ from app.schemas import (
     Token,
     LoginRequest,
     RefreshTokenRequest,
+    PasswordResetRequest,
+    PasswordResetConfirm,
+    PasswordResetResponse,
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
@@ -172,3 +180,80 @@ async def refresh_token(
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
     }
+
+
+@router.post(
+    "/password-reset-request",
+    response_model=PasswordResetResponse,
+    summary="Request password reset",
+    description="Request a password reset email. Sends a reset token to the user's email.",
+)
+async def password_reset_request(
+    reset_request: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Request a password reset.
+
+    - **email**: Registered email address
+
+    Always returns success to prevent email enumeration attacks.
+    """
+    user = get_user_by_email(db, reset_request.email)
+
+    if user:
+        # Create password reset token
+        token = create_password_reset_token(db, user.id)
+
+        # TODO: Send email with reset link
+        # For now, we just log/print the token (in production, send via email)
+        # In a real implementation, this would send an email with:
+        # f"{FRONTEND_URL}/reset-password?token={token}"
+
+    # Always return the same response to prevent email enumeration
+    return {
+        "message": "If an account with that email exists, a password reset link has been sent."
+    }
+
+
+@router.post(
+    "/password-reset",
+    response_model=PasswordResetResponse,
+    summary="Reset password",
+    description="Reset password using a valid reset token.",
+)
+async def password_reset(
+    reset_data: PasswordResetConfirm,
+    db: Session = Depends(get_db),
+):
+    """
+    Reset password using a reset token.
+
+    - **token**: Password reset token received via email
+    - **new_password**: New password (min 8 characters)
+
+    Returns success message if password was reset.
+    """
+    # Get the token from database
+    db_token = get_password_reset_token(db, reset_data.token)
+
+    # Check if token is valid
+    if not is_token_valid(db_token):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    # Update the user's password
+    user = update_user_password(db, db_token.user_id, reset_data.new_password)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found",
+        )
+
+    # Mark token as used
+    mark_token_used(db, db_token)
+
+    return {"message": "Password has been reset successfully"}

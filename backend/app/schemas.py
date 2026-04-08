@@ -57,3 +57,24 @@ class RefreshTokenRequest(BaseModel):
     """Schema for refresh token request."""
 
     refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    """Schema for password reset request."""
+
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    """Schema for password reset confirmation."""
+
+    token: str
+    new_password: str = Field(
+        ..., min_length=8, description="New password (min 8 characters)"
+    )
+
+
+class PasswordResetResponse(BaseModel):
+    """Schema for password reset response."""
+
+    message: str

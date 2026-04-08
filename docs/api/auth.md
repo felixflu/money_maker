@@ -126,6 +126,62 @@ Note: Both tokens are rotated (new refresh token issued).
 
 ---
 
+### POST /api/v1/auth/password-reset-request
+
+Request a password reset email. Sends a reset token to the user's email address.
+
+**Security Note**: Always returns success to prevent email enumeration attacks.
+
+#### Request
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "message": "If an account with that email exists, a password reset link has been sent."
+}
+```
+
+---
+
+### POST /api/v1/auth/password-reset
+
+Reset password using a valid reset token received via email.
+
+#### Request
+
+```json
+{
+  "token": "AbCdEfGhIjKlMnOpQrStUvWxYz1234567890",
+  "new_password": "newsecurepassword123"
+}
+```
+
+**Constraints:**
+- `token`: Valid reset token received via email
+- `new_password`: Minimum 8 characters
+
+#### Response (200 OK)
+
+```json
+{
+  "message": "Password has been reset successfully"
+}
+```
+
+#### Error Responses
+
+- **400 Bad Request**: Invalid or expired reset token
+- **422 Validation Error**: Password too short
+
+---
+
 ## Authentication
 
 To access protected endpoints, include the access token in the Authorization header:
@@ -179,3 +235,48 @@ curl -X POST "http://localhost:8000/api/v1/auth/login" \
 curl -X GET "http://localhost:8000/api/v1/protected" \
   -H "Authorization: Bearer <access_token>"
 ```
+
+### Example: Request password reset
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/password-reset-request" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com"
+  }'
+```
+
+### Example: Reset password with token
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/password-reset" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "your-reset-token-from-email",
+    "new_password": "newsecurepassword123"
+  }'
+```
+
+## Email Setup
+
+The password reset flow requires email sending capability. Currently, email sending is stubbed and tokens are logged to the console.
+
+### Configuration
+
+To enable email sending, configure the following environment variables:
+
+```bash
+# SMTP Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_TLS=true
+
+# Frontend URL (for reset links)
+FRONTEND_URL=https://yourdomain.com
+```
+
+### Password Reset Token Lifetime
+
+Password reset tokens are valid for **1 hour** and can only be used once.

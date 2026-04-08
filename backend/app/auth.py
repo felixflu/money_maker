@@ -90,3 +90,62 @@ def create_user(db: Session, email: str, password: str) -> User:
     db.commit()
     db.refresh(db_user)
     return db_user
+
+
+def create_password_reset_token(db: Session, user_id: int) -> str:
+    """Create a password reset token for a user."""
+    from app.models import PasswordResetToken
+    import secrets
+
+    # Generate a secure random token
+    token = secrets.token_urlsafe(32)
+
+    # Token expires in 1 hour
+    expires_at = datetime.utcnow() + timedelta(hours=1)
+
+    db_token = PasswordResetToken(
+        user_id=user_id,
+        token=token,
+        expires_at=expires_at,
+    )
+    db.add(db_token)
+    db.commit()
+    db.refresh(db_token)
+
+    return token
+
+
+def get_password_reset_token(db: Session, token: str):
+    """Get a password reset token by its value."""
+    from app.models import PasswordResetToken
+
+    return (
+        db.query(PasswordResetToken).filter(PasswordResetToken.token == token).first()
+    )
+
+
+def is_token_valid(db_token) -> bool:
+    """Check if a password reset token is valid (not expired and not used)."""
+    if not db_token:
+        return False
+    if db_token.used_at is not None:
+        return False
+    if datetime.utcnow() > db_token.expires_at:
+        return False
+    return True
+
+
+def mark_token_used(db: Session, db_token):
+    """Mark a password reset token as used."""
+    db_token.used_at = datetime.utcnow()
+    db.commit()
+
+
+def update_user_password(db: Session, user_id: int, new_password: str) -> User:
+    """Update a user's password."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user.hashed_password = get_password_hash(new_password)
+        db.commit()
+        db.refresh(user)
+    return user
