@@ -1,18 +1,6 @@
 {
-<<<<<<< HEAD
-<<<<<<< HEAD
-  "pid": 88521,
-  "acquired_at": "2026-04-10T07:56:20.259184+02:00",
-  "session_id": "%664",
-=======
-  "pid": 79438,
-  "acquired_at": "2026-04-10T07:54:47.28168+02:00",
-  "session_id": "%662",
->>>>>>> d8b6c9c1e20220aa921bcab9d0334f0a0f5b94f5
-=======
-  "pid": 84117,
-  "acquired_at": "2026-04-10T07:55:39.549483+02:00",
-  "session_id": "%663",
->>>>>>> 5ffd6e17518f6db0c0c55ebe6344fb467bdcfd80
-  "hostname": "pegasus.local"
+  "pid": 23226,
+  "acquired_at": "2026-04-10T09:28:34.922973+02:00",
+  "session_id": "%694",
+  "hostname": "pegasus.fritz.box"
 }

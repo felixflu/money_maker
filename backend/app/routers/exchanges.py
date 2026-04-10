@@ -26,6 +26,8 @@ from app.schemas import (
     ExchangeConnectionDetailResponse,
     TradeRepublicSyncRequest,
     TradeRepublicSyncResponse,
+    MexcSyncRequest,
+    MexcSyncResponse,
     ExchangeValidationRequest,
     ExchangeValidationResponse,
     SupportedExchange,
@@ -42,6 +44,11 @@ from app.integrations.coinbase import (
     CoinbaseAPIError,
     CoinbaseAuthError,
     CoinbaseRateLimitError,
+from app.integrations.mexc import (
+    MexcClient,
+    MexcAPIError,
+    MexcAuthError,
+    MexcRateLimitError,
 )
 
 router = APIRouter(prefix="/api/v1/exchanges", tags=["exchanges"])
@@ -70,6 +77,9 @@ SUPPORTED_EXCHANGES = [
         name="coinbase",
         display_name="Coinbase",
         description="Popular cryptocurrency exchange for buying, selling, and storing crypto",
+        name="mexc",
+        display_name="MEXC",
+        description="Global cryptocurrency exchange with spot and futures trading",
         supported_features=[
             "portfolio_sync",
             "transaction_import",
@@ -79,6 +89,11 @@ SUPPORTED_EXCHANGES = [
         requires_api_secret=True,
         website_url="https://coinbase.com",
         docs_url="https://docs.exchanges/coinbase.md",
+            "spot_trading",
+        ],
+        requires_api_secret=True,
+        website_url="https://www.mexc.com",
+        docs_url="https://docs.exchanges/mexc.md",
     ),
 ]
 
@@ -278,6 +293,8 @@ async def get_connection(
                 connection_valid, connection_error = client.validate_connection()
             elif connection.exchange_name == "coinbase":
                 client = CoinbaseClient(
+            elif connection.exchange_name == "mexc":
+                client = MexcClient(
                     api_key=connection.api_key_encrypted,
                     api_secret=connection.api_secret_encrypted,
                 )
@@ -492,16 +509,42 @@ async def validate_connection(
             message=f"API error: {e.message}",
         )
     except CoinbaseAuthError as e:
+
+    # MEXC validation
+    try:
+        if validation_data.exchange_name == "mexc":
+            client = MexcClient(
+                api_key=validation_data.api_key,
+                api_secret=validation_data.api_secret,
+            )
+            is_valid, error_message = client.validate_connection()
+
+            if is_valid:
+                account_info = client.get_account_info()
+                return ExchangeValidationResponse(
+                    valid=True,
+                    message="Connection successful",
+                    account_info=account_info,
+                )
+            else:
+                return ExchangeValidationResponse(
+                    valid=False,
+                    message=error_message or "Connection failed",
+                )
+
+    except MexcAuthError as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"Authentication failed: {e.message}",
         )
     except CoinbaseRateLimitError as e:
+    except MexcRateLimitError as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
         )
     except CoinbaseAPIError as e:
+    except MexcAPIError as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"API error: {e.message}",
@@ -618,6 +661,7 @@ async def sync_trade_republic(
 
 # ============================================================================
 # Coinbase Sync
+# MEXC Sync
 # ============================================================================
 
 
@@ -630,6 +674,14 @@ async def sync_trade_republic(
 async def sync_coinbase(
     connection_id: int,
     sync_request: TradeRepublicSyncRequest,
+    "/mexc/sync/{connection_id}",
+    response_model=MexcSyncResponse,
+    summary="Sync MEXC data",
+    description="Sync portfolio holdings and transactions from MEXC.",
+)
+async def sync_mexc(
+    connection_id: int,
+    sync_request: MexcSyncRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -637,6 +689,9 @@ async def sync_coinbase(
     Sync data from Coinbase.
 
     - **connection_id**: ID of the Coinbase connection
+    Sync data from MEXC.
+
+    - **connection_id**: ID of the MEXC connection
     - **sync_transactions**: Whether to sync transaction history (default: true)
     - **transaction_days**: Number of days of history to sync (default: 90)
 
@@ -649,6 +704,7 @@ async def sync_coinbase(
             ExchangeConnection.id == connection_id,
             ExchangeConnection.user_id == current_user.id,
             ExchangeConnection.exchange_name == "coinbase",
+            ExchangeConnection.exchange_name == "mexc",
         )
         .first()
     )
@@ -657,6 +713,7 @@ async def sync_coinbase(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Coinbase connection not found",
+            detail="MEXC connection not found",
         )
 
     if not connection.is_active:
@@ -668,6 +725,7 @@ async def sync_coinbase(
     try:
         # Create client and sync
         client = CoinbaseClient(
+        client = MexcClient(
             api_key=connection.api_key_encrypted,
             api_secret=connection.api_secret_encrypted,
         )
@@ -682,6 +740,7 @@ async def sync_coinbase(
             db.commit()
 
             return TradeRepublicSyncResponse(
+            return MexcSyncResponse(
                 success=True,
                 message="Sync completed successfully",
                 holdings_synced=len(result.get("holdings", [])),
@@ -690,6 +749,7 @@ async def sync_coinbase(
             )
         else:
             return TradeRepublicSyncResponse(
+            return MexcSyncResponse(
                 success=False,
                 message="Sync failed",
                 error=result.get("error", "Unknown error"),
@@ -698,6 +758,9 @@ async def sync_coinbase(
     except CoinbaseAuthError as e:
         logger.error(f"Coinbase auth error during sync: {e}")
         return TradeRepublicSyncResponse(
+    except MexcAuthError as e:
+        logger.error(f"MEXC auth error during sync: {e}")
+        return MexcSyncResponse(
             success=False,
             message="Authentication failed",
             error=f"Invalid credentials: {e.message}",
@@ -705,6 +768,9 @@ async def sync_coinbase(
     except CoinbaseRateLimitError as e:
         logger.error(f"Coinbase rate limit during sync: {e}")
         return TradeRepublicSyncResponse(
+    except MexcRateLimitError as e:
+        logger.error(f"MEXC rate limit during sync: {e}")
+        return MexcSyncResponse(
             success=False,
             message="Rate limit exceeded",
             error=f"Retry after {e.retry_after} seconds",
@@ -712,6 +778,8 @@ async def sync_coinbase(
     except Exception as e:
         logger.error(f"Unexpected error during Coinbase sync: {e}")
         return TradeRepublicSyncResponse(
+        logger.error(f"Unexpected error during MEXC sync: {e}")
+        return MexcSyncResponse(
             success=False,
             message="Sync failed",
             error=f"Unexpected error: {str(e)}",

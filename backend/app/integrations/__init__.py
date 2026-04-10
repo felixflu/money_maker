@@ -10,10 +10,20 @@ from app.integrations.trade_republic import (
     TradeRepublicAuthError,
     TradeRepublicRateLimitError,
 )
+from app.integrations.mexc import (
+    MexcClient,
+    MexcAPIError,
+    MexcAuthError,
+    MexcRateLimitError,
+)
 
 __all__ = [
     "TradeRepublicClient",
     "TradeRepublicAPIError",
     "TradeRepublicAuthError",
     "TradeRepublicRateLimitError",
+    "MexcClient",
+    "MexcAPIError",
+    "MexcAuthError",
+    "MexcRateLimitError",
 ]
