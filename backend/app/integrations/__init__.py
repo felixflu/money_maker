@@ -15,6 +15,11 @@ from app.integrations.mexc import (
     MexcAPIError,
     MexcAuthError,
     MexcRateLimitError,
+from app.integrations.bitpanda import (
+    BitpandaClient,
+    BitpandaAPIError,
+    BitpandaAuthError,
+    BitpandaRateLimitError,
 )
 
 __all__ = [
@@ -26,4 +31,8 @@ __all__ = [
     "MexcAPIError",
     "MexcAuthError",
     "MexcRateLimitError",
+    "BitpandaClient",
+    "BitpandaAPIError",
+    "BitpandaAuthError",
+    "BitpandaRateLimitError",
 ]
