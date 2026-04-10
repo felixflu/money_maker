@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import os
 
-from app.routers import auth
+from app.routers import auth, exchanges
 from app.models import init_db, get_db
 
 # Create FastAPI application
@@ -22,6 +22,7 @@ app = FastAPI(
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(exchanges.router)
 
 # Configure CORS
 app.add_middleware(

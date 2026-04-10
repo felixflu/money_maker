@@ -149,3 +149,63 @@ def update_user_password(db: Session, user_id: int, new_password: str) -> User:
         db.commit()
         db.refresh(user)
     return user
+
+
+# ============================================================================
+# FastAPI Dependency for Protected Routes
+# ============================================================================
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+from app.database import get_db
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> User:
+    """
+    Get the current authenticated user from JWT token.
+
+    Args:
+        db: Database session
+        token: JWT token from Authorization header
+
+    Returns:
+        Authenticated User object
+
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    payload = decode_token(token)
+    if payload is None or payload.sub is None:
+        raise credentials_exception
+
+    # Verify it's an access token
+    if payload.type != ACCESS_TOKEN_TYPE:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(User).filter(User.id == payload.sub).first()
+    if user is None:
+        raise credentials_exception
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive",
+        )
+
+    return user
