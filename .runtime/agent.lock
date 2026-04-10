@@ -1,6 +1,12 @@
 {
+<<<<<<< HEAD
   "pid": 88521,
   "acquired_at": "2026-04-10T07:56:20.259184+02:00",
   "session_id": "%664",
+=======
+  "pid": 79438,
+  "acquired_at": "2026-04-10T07:54:47.28168+02:00",
+  "session_id": "%662",
+>>>>>>> d8b6c9c1e20220aa921bcab9d0334f0a0f5b94f5
   "hostname": "pegasus.local"
 }
