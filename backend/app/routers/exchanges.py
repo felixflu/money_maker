@@ -4,6 +4,7 @@ Exchange routes for managing exchange connections and syncing data.
 Provides endpoints for:
 - CRUD operations on exchange connections
 - Trade Republic integration
+- Coinbase integration
 - Syncing portfolio data and transactions
 - Validating connection credentials
 """
@@ -36,6 +37,12 @@ from app.integrations.trade_republic import (
     TradeRepublicAuthError,
     TradeRepublicRateLimitError,
 )
+from app.integrations.coinbase import (
+    CoinbaseClient,
+    CoinbaseAPIError,
+    CoinbaseAuthError,
+    CoinbaseRateLimitError,
+)
 
 router = APIRouter(prefix="/api/v1/exchanges", tags=["exchanges"])
 logger = logging.getLogger(__name__)
@@ -58,6 +65,20 @@ SUPPORTED_EXCHANGES = [
         requires_api_secret=True,
         website_url="https://traderepublic.com",
         docs_url="https://docs.exchanges/traderepublic.md",
+    ),
+    SupportedExchange(
+        name="coinbase",
+        display_name="Coinbase",
+        description="Popular cryptocurrency exchange for buying, selling, and storing crypto",
+        supported_features=[
+            "portfolio_sync",
+            "transaction_import",
+            "crypto_holdings",
+            "price_lookup",
+        ],
+        requires_api_secret=True,
+        website_url="https://coinbase.com",
+        docs_url="https://docs.exchanges/coinbase.md",
     ),
 ]
 
@@ -255,6 +276,12 @@ async def get_connection(
                     api_secret=connection.api_secret_encrypted,
                 )
                 connection_valid, connection_error = client.validate_connection()
+            elif connection.exchange_name == "coinbase":
+                client = CoinbaseClient(
+                    api_key=connection.api_key_encrypted,
+                    api_secret=connection.api_secret_encrypted,
+                )
+                connection_valid, connection_error = client.validate_connection()
         except Exception as e:
             connection_error = str(e)
             logger.error(f"Error validating connection {connection_id}: {e}")
@@ -429,6 +456,26 @@ async def validate_connection(
                     message=error_message or "Connection failed",
                 )
 
+        elif validation_data.exchange_name == "coinbase":
+            client = CoinbaseClient(
+                api_key=validation_data.api_key,
+                api_secret=validation_data.api_secret,
+            )
+            is_valid, error_message = client.validate_connection()
+
+            if is_valid:
+                account_info = client.get_account_info()
+                return ExchangeValidationResponse(
+                    valid=True,
+                    message="Connection successful",
+                    account_info=account_info,
+                )
+            else:
+                return ExchangeValidationResponse(
+                    valid=False,
+                    message=error_message or "Connection failed",
+                )
+
     except TradeRepublicAuthError as e:
         return ExchangeValidationResponse(
             valid=False,
@@ -440,6 +487,21 @@ async def validate_connection(
             message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
         )
     except TradeRepublicAPIError as e:
+        return ExchangeValidationResponse(
+            valid=False,
+            message=f"API error: {e.message}",
+        )
+    except CoinbaseAuthError as e:
+        return ExchangeValidationResponse(
+            valid=False,
+            message=f"Authentication failed: {e.message}",
+        )
+    except CoinbaseRateLimitError as e:
+        return ExchangeValidationResponse(
+            valid=False,
+            message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
+        )
+    except CoinbaseAPIError as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"API error: {e.message}",
@@ -547,6 +609,108 @@ async def sync_trade_republic(
         )
     except Exception as e:
         logger.error(f"Unexpected error during Trade Republic sync: {e}")
+        return TradeRepublicSyncResponse(
+            success=False,
+            message="Sync failed",
+            error=f"Unexpected error: {str(e)}",
+        )
+
+
+# ============================================================================
+# Coinbase Sync
+# ============================================================================
+
+
+@router.post(
+    "/coinbase/sync/{connection_id}",
+    response_model=TradeRepublicSyncResponse,
+    summary="Sync Coinbase data",
+    description="Sync portfolio holdings and transactions from Coinbase.",
+)
+async def sync_coinbase(
+    connection_id: int,
+    sync_request: TradeRepublicSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Sync data from Coinbase.
+
+    - **connection_id**: ID of the Coinbase connection
+    - **sync_transactions**: Whether to sync transaction history (default: true)
+    - **transaction_days**: Number of days of history to sync (default: 90)
+
+    Returns sync results including counts of synced data.
+    """
+    # Get connection
+    connection = (
+        db.query(ExchangeConnection)
+        .filter(
+            ExchangeConnection.id == connection_id,
+            ExchangeConnection.user_id == current_user.id,
+            ExchangeConnection.exchange_name == "coinbase",
+        )
+        .first()
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coinbase connection not found",
+        )
+
+    if not connection.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connection is not active",
+        )
+
+    try:
+        # Create client and sync
+        client = CoinbaseClient(
+            api_key=connection.api_key_encrypted,
+            api_secret=connection.api_secret_encrypted,
+        )
+
+        result = client.sync_portfolio()
+
+        if result["success"]:
+            # Update last synced timestamp
+            from datetime import datetime
+
+            connection.last_synced_at = datetime.utcnow()
+            db.commit()
+
+            return TradeRepublicSyncResponse(
+                success=True,
+                message="Sync completed successfully",
+                holdings_synced=len(result.get("holdings", [])),
+                transactions_synced=len(result.get("transactions", [])),
+                synced_at=connection.last_synced_at,
+            )
+        else:
+            return TradeRepublicSyncResponse(
+                success=False,
+                message="Sync failed",
+                error=result.get("error", "Unknown error"),
+            )
+
+    except CoinbaseAuthError as e:
+        logger.error(f"Coinbase auth error during sync: {e}")
+        return TradeRepublicSyncResponse(
+            success=False,
+            message="Authentication failed",
+            error=f"Invalid credentials: {e.message}",
+        )
+    except CoinbaseRateLimitError as e:
+        logger.error(f"Coinbase rate limit during sync: {e}")
+        return TradeRepublicSyncResponse(
+            success=False,
+            message="Rate limit exceeded",
+            error=f"Retry after {e.retry_after} seconds",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during Coinbase sync: {e}")
         return TradeRepublicSyncResponse(
             success=False,
             message="Sync failed",
