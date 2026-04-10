@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '../ProtectedRoute'
-import { Portfolio } from '../types'
+import { PortfolioWithPnL } from '../types'
+import { PnLChart } from '../components/PnLChart'
+import { AssetPnLTable } from '../components/AssetPnLTable'
 
-async function fetchPortfolio(): Promise<Portfolio> {
+async function fetchPortfolio(): Promise<PortfolioWithPnL> {
   await new Promise(resolve => setTimeout(resolve, 500))
   return {
     totalValue: 0,
-    holdings: []
+    holdings: [],
+    pnlHistory: [],
+    totalPnL: 0,
+    totalPnLPercent: 0,
+    assetPnL: []
   }
 }
 
@@ -26,7 +32,7 @@ function formatPercentage(value: number): string {
 }
 
 function DashboardContent() {
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [portfolio, setPortfolio] = useState<PortfolioWithPnL | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,14 +72,14 @@ function DashboardContent() {
   return (
     <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
       <h1>Dashboard</h1>
-      
-      <div 
+
+      <div
         data-testid="total-value"
-        style={{ 
-          margin: '2rem 0', 
-          padding: '1.5rem', 
-          backgroundColor: '#f5f5f5', 
-          borderRadius: '8px' 
+        style={{
+          margin: '2rem 0',
+          padding: '1.5rem',
+          backgroundColor: '#f5f5f5',
+          borderRadius: '8px'
         }}
       >
         <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', color: '#666' }}>
@@ -84,15 +90,47 @@ function DashboardContent() {
         </p>
       </div>
 
+      <section style={{ marginBottom: '2rem' }}>
+        <h2>Performance</h2>
+        <div
+          style={{
+            padding: '1.5rem',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            border: '1px solid #e5e5e5'
+          }}
+        >
+          <PnLChart
+            data={portfolio?.pnlHistory || []}
+            initialValue={10000}
+          />
+        </div>
+      </section>
+
+      <section style={{ marginBottom: '2rem' }}>
+        <h2>Asset P&L</h2>
+        <div
+          style={{
+            padding: '1.5rem',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            border: '1px solid #e5e5e5',
+            overflowX: 'auto'
+          }}
+        >
+          <AssetPnLTable assets={portfolio?.assetPnL || []} />
+        </div>
+      </section>
+
       <section>
         <h2>Holdings</h2>
-        
+
         {isEmpty ? (
-          <div 
+          <div
             data-testid="empty-portfolio"
-            style={{ 
-              padding: '2rem', 
-              textAlign: 'center', 
+            style={{
+              padding: '2rem',
+              textAlign: 'center',
               color: '#666',
               backgroundColor: '#fafafa',
               borderRadius: '8px',
@@ -105,10 +143,10 @@ function DashboardContent() {
             </p>
           </div>
         ) : (
-          <table 
+          <table
             data-testid="holdings-table"
-            style={{ 
-              width: '100%', 
+            style={{
+              width: '100%',
               borderCollapse: 'collapse',
               marginTop: '1rem'
             }}
@@ -125,7 +163,7 @@ function DashboardContent() {
             </thead>
             <tbody>
               {portfolio?.holdings.map((holding) => (
-                <tr 
+                <tr
                   key={holding.id}
                   data-testid={`holding-row-${holding.symbol}`}
                   style={{ borderBottom: '1px solid #eee' }}
@@ -145,8 +183,8 @@ function DashboardContent() {
                   </td>
                   <td style={{ padding: '0.75rem', textAlign: 'right' }}>
                     {formatPercentage(
-                      portfolio.totalValue > 0 
-                        ? (holding.value / portfolio.totalValue) * 100 
+                      portfolio.totalValue > 0
+                        ? (holding.value / portfolio.totalValue) * 100
                         : 0
                     )}
                   </td>

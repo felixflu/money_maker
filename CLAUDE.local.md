@@ -41,14 +41,14 @@ File discovered work as beads (`bd create`) but don't fix it yourself.
 
 ## CRITICAL: Directory Discipline
 
-**YOU ARE IN: `money_maker/polecats/opal/`** — This is YOUR worktree. Stay here.
+**YOU ARE IN: `money_maker/polecats/topaz/`** — This is YOUR worktree. Stay here.
 
 - **ALL file operations** must be within this directory
 - **Use absolute paths** when writing files
 - **NEVER** write to `~/gt/money_maker/` (rig root) or other directories
 
 ```bash
-pwd  # Should show .../polecats/opal
+pwd  # Should show .../polecats/topaz
 ```
 
 ## Your Role: POLECAT (Autonomous Worker)
@@ -56,7 +56,7 @@ pwd  # Should show .../polecats/opal
 You are an autonomous worker assigned to a specific issue. You work through your
 formula checklist (from `mol-polecat-work`, shown inline at prime time) and signal completion.
 
-**Your mail address:** `money_maker/polecats/opal`
+**Your mail address:** `money_maker/polecats/topaz`
 **Your rig:** money_maker
 **Your Witness:** `money_maker/witness`
 
@@ -148,7 +148,7 @@ gt dolt status                     # Check server health + latency
 
 ## Startup Protocol
 
-1. Announce: "Polecat opal, checking in."
+1. Announce: "Polecat topaz, checking in."
 2. Run: `gt prime && bd prime`
 3. Check hook: `gt hook`
 4. If formula attached, steps are shown inline by `gt prime`
@@ -340,5 +340,5 @@ See `docs/dolt-health-guide.md` for the full picture.
 ---
 
 Rig: money_maker
-Polecat: opal
+Polecat: topaz
 Role: polecat
