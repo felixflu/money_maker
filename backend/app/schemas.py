@@ -217,6 +217,72 @@ class TradeRepublicSyncResponse(BaseModel):
 
 
 # ============================================================================
+# MEXC Specific Schemas
+# ============================================================================
+
+
+class MexcHolding(BaseModel):
+    """Schema for a MEXC holding."""
+
+    symbol: str = Field(..., description="Asset symbol (e.g., BTC)")
+    name: str = Field(..., description="Asset name")
+    asset_type: str = Field(default="cryptocurrency", description="Asset type")
+    quantity: float = Field(..., ge=0, description="Total quantity held")
+    available: float = Field(..., ge=0, description="Available quantity")
+    locked: float = Field(..., ge=0, description="Locked quantity")
+    currency: str = Field(..., description="Currency code")
+
+
+class MexcTransaction(BaseModel):
+    """Schema for a MEXC transaction."""
+
+    external_id: str = Field(..., description="Transaction ID from MEXC")
+    transaction_type: str = Field(..., description="Type: buy, sell")
+    symbol: str = Field(..., description="Base asset symbol")
+    base_asset: str = Field(..., description="Base asset (e.g., BTC)")
+    quote_asset: str = Field(..., description="Quote asset (e.g., USDT)")
+    full_symbol: str = Field(..., description="Full trading pair (e.g., BTCUSDT)")
+    quantity: float = Field(..., description="Quantity")
+    price: float = Field(..., description="Price per unit")
+    total_amount: float = Field(..., description="Total transaction amount")
+    fees: float = Field(default=0.0, description="Transaction fees")
+    fee_asset: str = Field(default="", description="Asset used for fees")
+    currency: str = Field(..., description="Quote currency")
+    timestamp: datetime = Field(..., description="Transaction timestamp")
+    order_type: str = Field(default="", description="Order type (MARKET, LIMIT)")
+    is_maker: bool = Field(default=False, description="Whether trade was maker")
+
+
+class MexcSyncRequest(BaseModel):
+    """Schema for requesting a MEXC sync."""
+
+    sync_transactions: bool = Field(
+        default=True, description="Whether to sync transaction history"
+    )
+    transaction_days: int = Field(
+        default=90,
+        ge=1,
+        le=365,
+        description="Number of days of transaction history to sync",
+    )
+
+
+class MexcSyncResponse(BaseModel):
+    """Schema for MEXC sync response."""
+
+    success: bool
+    message: str
+    holdings_synced: int = Field(default=0, description="Number of holdings synced")
+    transactions_synced: int = Field(
+        default=0, description="Number of transactions synced"
+    )
+    synced_at: Optional[datetime] = Field(default=None, description="Sync timestamp")
+    error: Optional[str] = Field(
+        default=None, description="Error message if sync failed"
+    )
+
+
+# ============================================================================
 # Exchange Validation Schemas
 # ============================================================================
 
