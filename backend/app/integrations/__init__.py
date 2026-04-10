@@ -10,10 +10,20 @@ from app.integrations.trade_republic import (
     TradeRepublicAuthError,
     TradeRepublicRateLimitError,
 )
+from app.integrations.bitpanda import (
+    BitpandaClient,
+    BitpandaAPIError,
+    BitpandaAuthError,
+    BitpandaRateLimitError,
+)
 
 __all__ = [
     "TradeRepublicClient",
     "TradeRepublicAPIError",
     "TradeRepublicAuthError",
     "TradeRepublicRateLimitError",
+    "BitpandaClient",
+    "BitpandaAPIError",
+    "BitpandaAuthError",
+    "BitpandaRateLimitError",
 ]

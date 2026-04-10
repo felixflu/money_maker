@@ -25,6 +25,8 @@ from app.schemas import (
     ExchangeConnectionDetailResponse,
     TradeRepublicSyncRequest,
     TradeRepublicSyncResponse,
+    BitpandaSyncRequest,
+    BitpandaSyncResponse,
     ExchangeValidationRequest,
     ExchangeValidationResponse,
     SupportedExchange,
@@ -35,6 +37,12 @@ from app.integrations.trade_republic import (
     TradeRepublicAPIError,
     TradeRepublicAuthError,
     TradeRepublicRateLimitError,
+)
+from app.integrations.bitpanda import (
+    BitpandaClient,
+    BitpandaAPIError,
+    BitpandaAuthError,
+    BitpandaRateLimitError,
 )
 
 router = APIRouter(prefix="/api/v1/exchanges", tags=["exchanges"])
@@ -58,6 +66,20 @@ SUPPORTED_EXCHANGES = [
         requires_api_secret=True,
         website_url="https://traderepublic.com",
         docs_url="https://docs.exchanges/traderepublic.md",
+    ),
+    SupportedExchange(
+        name="bitpanda",
+        display_name="Bitpanda",
+        description="European cryptocurrency broker with crypto indices and metals",
+        supported_features=[
+            "portfolio_sync",
+            "transaction_import",
+            "crypto_holdings",
+            "fiat_wallets",
+        ],
+        requires_api_secret=False,
+        website_url="https://bitpanda.com",
+        docs_url="https://docs.exchanges/bitpanda.md",
     ),
 ]
 
@@ -255,6 +277,12 @@ async def get_connection(
                     api_secret=connection.api_secret_encrypted,
                 )
                 connection_valid, connection_error = client.validate_connection()
+            elif connection.exchange_name == "bitpanda":
+                client = BitpandaClient(
+                    api_key=connection.api_key_encrypted,
+                    api_secret=connection.api_secret_encrypted,
+                )
+                connection_valid, connection_error = client.validate_connection()
         except Exception as e:
             connection_error = str(e)
             logger.error(f"Error validating connection {connection_id}: {e}")
@@ -429,6 +457,26 @@ async def validate_connection(
                     message=error_message or "Connection failed",
                 )
 
+        elif validation_data.exchange_name == "bitpanda":
+            client = BitpandaClient(
+                api_key=validation_data.api_key,
+                api_secret=validation_data.api_secret,
+            )
+            is_valid, error_message = client.validate_connection()
+
+            if is_valid:
+                account_info = client.get_account_info()
+                return ExchangeValidationResponse(
+                    valid=True,
+                    message="Connection successful",
+                    account_info=account_info,
+                )
+            else:
+                return ExchangeValidationResponse(
+                    valid=False,
+                    message=error_message or "Connection failed",
+                )
+
     except TradeRepublicAuthError as e:
         return ExchangeValidationResponse(
             valid=False,
@@ -440,6 +488,21 @@ async def validate_connection(
             message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
         )
     except TradeRepublicAPIError as e:
+        return ExchangeValidationResponse(
+            valid=False,
+            message=f"API error: {e.message}",
+        )
+    except BitpandaAuthError as e:
+        return ExchangeValidationResponse(
+            valid=False,
+            message=f"Authentication failed: {e.message}",
+        )
+    except BitpandaRateLimitError as e:
+        return ExchangeValidationResponse(
+            valid=False,
+            message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
+        )
+    except BitpandaAPIError as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"API error: {e.message}",
@@ -548,6 +611,108 @@ async def sync_trade_republic(
     except Exception as e:
         logger.error(f"Unexpected error during Trade Republic sync: {e}")
         return TradeRepublicSyncResponse(
+            success=False,
+            message="Sync failed",
+            error=f"Unexpected error: {str(e)}",
+        )
+
+
+# ============================================================================
+# Bitpanda Sync
+# ============================================================================
+
+
+@router.post(
+    "/bitpanda/sync/{connection_id}",
+    response_model=BitpandaSyncResponse,
+    summary="Sync Bitpanda data",
+    description="Sync cryptocurrency holdings and trades from Bitpanda.",
+)
+async def sync_bitpanda(
+    connection_id: int,
+    sync_request: BitpandaSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Sync data from Bitpanda.
+
+    - **connection_id**: ID of the Bitpanda connection
+    - **sync_transactions**: Whether to sync trade history (default: true)
+    - **transaction_days**: Number of days of history to sync (default: 90)
+
+    Returns sync results including counts of synced data.
+    """
+    # Get connection
+    connection = (
+        db.query(ExchangeConnection)
+        .filter(
+            ExchangeConnection.id == connection_id,
+            ExchangeConnection.user_id == current_user.id,
+            ExchangeConnection.exchange_name == "bitpanda",
+        )
+        .first()
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bitpanda connection not found",
+        )
+
+    if not connection.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connection is not active",
+        )
+
+    try:
+        # Create client and sync
+        client = BitpandaClient(
+            api_key=connection.api_key_encrypted,
+            api_secret=connection.api_secret_encrypted,
+        )
+
+        result = client.sync_portfolio()
+
+        if result["success"]:
+            # Update last synced timestamp
+            from datetime import datetime
+
+            connection.last_synced_at = datetime.utcnow()
+            db.commit()
+
+            return BitpandaSyncResponse(
+                success=True,
+                message="Sync completed successfully",
+                holdings_synced=len(result.get("holdings", [])),
+                transactions_synced=len(result.get("transactions", [])),
+                synced_at=connection.last_synced_at,
+            )
+        else:
+            return BitpandaSyncResponse(
+                success=False,
+                message="Sync failed",
+                error=result.get("error", "Unknown error"),
+            )
+
+    except BitpandaAuthError as e:
+        logger.error(f"Bitpanda auth error during sync: {e}")
+        return BitpandaSyncResponse(
+            success=False,
+            message="Authentication failed",
+            error=f"Invalid credentials: {e.message}",
+        )
+    except BitpandaRateLimitError as e:
+        logger.error(f"Bitpanda rate limit during sync: {e}")
+        return BitpandaSyncResponse(
+            success=False,
+            message="Rate limit exceeded",
+            error=f"Retry after {e.retry_after} seconds",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during Bitpanda sync: {e}")
+        return BitpandaSyncResponse(
             success=False,
             message="Sync failed",
             error=f"Unexpected error: {str(e)}",

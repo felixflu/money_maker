@@ -217,6 +217,83 @@ class TradeRepublicSyncResponse(BaseModel):
 
 
 # ============================================================================
+# Bitpanda Specific Schemas
+# ============================================================================
+
+
+class BitpandaCredentials(BaseModel):
+    """Schema for Bitpanda API credentials."""
+
+    api_key: str = Field(..., min_length=1, description="Bitpanda API key")
+    api_secret: Optional[str] = Field(
+        default=None, description="Not used for Bitpanda (API key only)"
+    )
+
+
+class BitpandaHolding(BaseModel):
+    """Schema for a Bitpanda cryptocurrency holding."""
+
+    symbol: str = Field(..., description="Cryptocurrency symbol (e.g., BTC, ETH)")
+    name: str = Field(..., description="Asset name")
+    asset_type: str = Field(default="cryptocurrency", description="Asset type")
+    quantity: float = Field(..., ge=0, description="Quantity held")
+    available_quantity: float = Field(..., ge=0, description="Available quantity")
+    current_price: Optional[float] = Field(
+        default=None, description="Current price if available"
+    )
+    currency: str = Field(default="EUR", description="Currency code")
+    total_value: Optional[float] = Field(
+        default=None, description="Total value if price available"
+    )
+    wallet_id: str = Field(..., description="Bitpanda wallet ID")
+
+
+class BitpandaTransaction(BaseModel):
+    """Schema for a Bitpanda trade/transaction."""
+
+    external_id: str = Field(..., description="Transaction ID from Bitpanda")
+    transaction_type: str = Field(..., description="Type: buy, sell, etc.")
+    symbol: str = Field(..., description="Cryptocurrency symbol")
+    asset_name: Optional[str] = Field(default=None, description="Asset name")
+    quantity: float = Field(..., description="Quantity")
+    price: float = Field(..., description="Price per unit")
+    total_amount: float = Field(..., description="Total transaction amount")
+    fees: float = Field(default=0.0, description="Transaction fees")
+    currency: str = Field(default="EUR", description="Currency code")
+    timestamp: datetime = Field(..., description="Transaction timestamp")
+    status: str = Field(..., description="Transaction status")
+
+
+class BitpandaSyncRequest(BaseModel):
+    """Schema for requesting a Bitpanda sync."""
+
+    sync_transactions: bool = Field(
+        default=True, description="Whether to sync trade history"
+    )
+    transaction_days: int = Field(
+        default=90,
+        ge=1,
+        le=365,
+        description="Number of days of transaction history to sync",
+    )
+
+
+class BitpandaSyncResponse(BaseModel):
+    """Schema for Bitpanda sync response."""
+
+    success: bool
+    message: str
+    holdings_synced: int = Field(default=0, description="Number of holdings synced")
+    transactions_synced: int = Field(
+        default=0, description="Number of transactions synced"
+    )
+    synced_at: Optional[datetime] = Field(default=None, description="Sync timestamp")
+    error: Optional[str] = Field(
+        default=None, description="Error message if sync failed"
+    )
+
+
+# ============================================================================
 # Exchange Validation Schemas
 # ============================================================================
 
