@@ -1,0 +1,35 @@
+{
+  "beads": {
+    "mm-1wi": {
+      "bead_id": "mm-1wi",
+      "count": 1,
+      "last_respawn": "2026-04-08T10:14:15.311333Z"
+    },
+    "mm-779": {
+      "bead_id": "mm-779",
+      "count": 1,
+      "last_respawn": "2026-04-09T13:22:03.826166Z"
+    },
+    "mm-c6o": {
+      "bead_id": "mm-c6o",
+      "count": 1,
+      "last_respawn": "2026-04-08T09:50:15.04045Z"
+    },
+    "mm-jzk": {
+      "bead_id": "mm-jzk",
+      "count": 1,
+      "last_respawn": "2026-04-08T09:49:31.059559Z"
+    },
+    "mm-mc0": {
+      "bead_id": "mm-mc0",
+      "count": 1,
+      "last_respawn": "2026-04-08T10:13:26.012447Z"
+    },
+    "mm-sq0": {
+      "bead_id": "mm-sq0",
+      "count": 3,
+      "last_respawn": "2026-04-08T09:18:39.708475Z"
+    }
+  },
+  "last_updated": "2026-04-09T13:22:03.826168Z"
+}

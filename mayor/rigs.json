@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "rigs": {
+    "money_maker": {
+      "git_url": "git@github.com:felixflu/money_maker.git",
+      "added_at": "2026-04-01T16:47:00.37455+02:00",
+      "beads": {
+        "repo": "",
+        "prefix": "mm"
+      }
+    }
+  }
+}
