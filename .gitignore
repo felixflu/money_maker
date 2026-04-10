@@ -1,93 +1,50 @@
-# Gas Town HQ .gitignore
-# Track: Role context, handoff docs, beads config/data, rig configs
-# Ignore: Git worktrees (polecats) and clones (mayor/refinery rigs), runtime state
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+.env
 
-# =============================================================================
-# Runtime state files (transient)
-# =============================================================================
-**/state.json
-**/*.lock
-**/*.flock
-**/locks/
-**/registry.json
-**/*.pid
-**/heartbeat.json
-**/activity.json
-.events.jsonl
-.feed.jsonl
-**/audit.log
-**/last-touched
-**/.local_version
-**/.gt-types-configured
-**/feed-*.json
+# Node / Next.js
+node_modules/
+.next/
+out/
+.npm/
+*.tsbuildinfo
 
-# =============================================================================
-# Runtime state directories
-# =============================================================================
-daemon/
-logs/
+# Coverage / Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage/
 
-# =============================================================================
-# Centralized Dolt SQL server data directory
-# =============================================================================
-.dolt-data/
-
-# Dolt internal directories at any level (rig databases, nested .beads dolt)
-**/.dolt/
-**/.doltcfg/
-
-# =============================================================================
-# Event stream storage
-# =============================================================================
-events/
-
-# =============================================================================
-# HQ beads directory
-# =============================================================================
-beads_hq/
-
-# =============================================================================
-# Rig git worktrees (recreate with 'gt sling' or 'gt rig add')
-# =============================================================================
-
-# Polecats - worker worktrees
-**/polecats/
-
-# Deacon dogs - patrol worker worktrees
-**/deacon/dogs/
-
-# Mayor rig clones
-**/mayor/rig/
-
-# Refinery working clones
-**/refinery/rig/
-
-# Crew workspaces (user-managed)
-**/crew/
-
-# =============================================================================
-# Runtime state directories (gitignored ephemeral data)
-# =============================================================================
-**/.runtime/
-
-# =============================================================================
-# Rig .beads symlinks (point to ignored mayor/rig/.beads, recreated on setup)
-# =============================================================================
-# Add rig-specific symlinks here, e.g.:
-# gastown/.beads
-
-# =============================================================================
-# OS and editor files
-# =============================================================================
-.DS_Store
-*~
+# IDE
+.idea/
+.vscode/
 *.swp
 *.swo
-.vscode/
-.idea/
 
-# =============================================================================
-# Explicitly track (override above patterns)
-# =============================================================================
-# Note: .beads/ has its own .gitignore that handles database files
-# and keeps metadata.json, config file as source of truth
+# OS
+.DS_Store
+Thumbs.db
+
+# Beads / Dolt files
+**/.dolt/
+**/.doltcfg/
+.dolt-data/
+*.db
+.beads-credential-key
+
+# Logs
+*.log
+logs/
