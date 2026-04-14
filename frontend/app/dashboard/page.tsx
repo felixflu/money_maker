@@ -2,26 +2,105 @@
 
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '../ProtectedRoute'
-import { PortfolioWithPnL } from '../types'
+import { PortfolioWithPnL, Holding, AssetPnL } from '../types'
 import { PnLChart } from '../components/PnLChart'
 import { AssetPnLTable } from '../components/AssetPnLTable'
 import { TransactionHistory } from '../components/TransactionHistory'
 import { Transaction } from '../types'
 
+const STORAGE_KEY = 'mm_auth_tokens'
+const REFRESH_INTERVAL_MS = 30_000
+
+function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (!stored) return null
+  try {
+    return (JSON.parse(stored) as { accessToken: string }).accessToken
+  } catch {
+    return null
+  }
+}
+
 async function fetchPortfolio(): Promise<PortfolioWithPnL> {
-  await new Promise(resolve => setTimeout(resolve, 500))
+  const token = getAccessToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const response = await fetch('/api/v1/portfolio', { headers })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch portfolio: ${response.status}`)
+  }
+
+  const portfolios = await response.json()
+
+  // Aggregate all portfolios into a single dashboard view
+  let totalValue = 0
+  let totalCostBasis = 0
+  const allHoldings: Holding[] = []
+  const assetPnLMap: Record<string, AssetPnL> = {}
+
+  for (const p of portfolios) {
+    totalValue += parseFloat(p.totalValue || '0')
+    totalCostBasis += parseFloat(p.totalCostBasis || '0')
+
+    for (const h of p.holdings || []) {
+      const currentPrice = parseFloat(h.currentPrice || '0')
+      const value = parseFloat(h.value || '0')
+      const costBasis = parseFloat(h.costBasis || '0')
+      const unrealizedPnL = parseFloat(h.unrealizedPnL || '0')
+
+      allHoldings.push({
+        id: String(h.id),
+        symbol: h.symbol,
+        name: h.name,
+        quantity: parseFloat(h.quantity || '0'),
+        currentPrice,
+        value,
+      })
+
+      if (assetPnLMap[h.symbol]) {
+        assetPnLMap[h.symbol].costBasis += costBasis
+        assetPnLMap[h.symbol].currentValue += value
+        assetPnLMap[h.symbol].unrealizedPnL += unrealizedPnL
+        assetPnLMap[h.symbol].totalPnL += unrealizedPnL
+      } else {
+        assetPnLMap[h.symbol] = {
+          symbol: h.symbol,
+          name: h.name,
+          costBasis,
+          currentValue: value,
+          realizedPnL: 0,
+          unrealizedPnL,
+          totalPnL: unrealizedPnL,
+          pnlPercent: costBasis > 0 ? (unrealizedPnL / costBasis) * 100 : 0,
+        }
+      }
+    }
+  }
+
+  // Recalculate pnlPercent after aggregation
+  const assetPnL = Object.values(assetPnLMap).map(a => ({
+    ...a,
+    pnlPercent: a.costBasis > 0 ? (a.totalPnL / a.costBasis) * 100 : 0,
+  }))
+
+  const totalPnL = totalValue - totalCostBasis
+  const totalPnLPercent = totalCostBasis > 0 ? (totalPnL / totalCostBasis) * 100 : 0
+
   return {
-    totalValue: 0,
-    holdings: [],
+    totalValue,
+    holdings: allHoldings,
     pnlHistory: [],
-    totalPnL: 0,
-    totalPnLPercent: 0,
-    assetPnL: []
+    totalPnL,
+    totalPnLPercent,
+    assetPnL,
   }
 }
 
 async function fetchTransactions(): Promise<Transaction[]> {
-  await new Promise(resolve => setTimeout(resolve, 500))
+  // Transaction endpoint not yet available; return empty
   return []
 }
 
@@ -45,22 +124,43 @@ function DashboardContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let isMounted = true
+
     async function loadData() {
       try {
         const [portfolioData, transactionData] = await Promise.all([
           fetchPortfolio(),
           fetchTransactions(),
         ])
-        setPortfolio(portfolioData)
-        setTransactions(transactionData)
+        if (isMounted) {
+          setPortfolio(portfolioData)
+          setTransactions(transactionData)
+          setError(null)
+        }
       } catch (err) {
-        setError('Failed to load portfolio data')
+        if (isMounted) {
+          setError('Failed to load portfolio data')
+        }
       } finally {
-        setIsLoading(false)
+        if (isMounted) {
+          setIsLoading(false)
+        }
       }
     }
 
     loadData()
+
+    // Auto-refresh prices every 30 seconds
+    const interval = setInterval(() => {
+      fetchPortfolio()
+        .then(data => { if (isMounted) setPortfolio(data) })
+        .catch(() => {})
+    }, REFRESH_INTERVAL_MS)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
   }, [])
 
   if (isLoading) {
