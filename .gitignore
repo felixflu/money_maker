@@ -28,6 +28,8 @@ htmlcov/
 .pytest_cache/
 .tox/
 coverage/
+playwright-report/
+test-results/
 
 # IDE
 .idea/
