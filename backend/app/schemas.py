@@ -3,7 +3,8 @@ Pydantic schemas for authentication and user management.
 """
 
 from datetime import datetime
-from typing import Optional
+from enum import Enum
+from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -475,3 +476,39 @@ class SupportedExchangesResponse(BaseModel):
     """Schema for list of supported exchanges."""
 
     exchanges: list[SupportedExchange]
+
+
+# ============================================================================
+# Price Schemas
+# ============================================================================
+
+
+class AssetType(str, Enum):
+    """Supported asset types."""
+
+    cryptocurrency = "cryptocurrency"
+    etf = "etf"
+    stock = "stock"
+
+
+class PriceResponse(BaseModel):
+    """Schema for a price response."""
+
+    symbol: str = Field(..., description="Asset symbol")
+    price: str = Field(..., description="Current price")
+    currency: str = Field(default="USD", description="Price currency")
+    source: str = Field(..., description="Price data source")
+    timestamp: Optional[datetime] = Field(default=None, description="Price timestamp")
+    is_stale: bool = Field(default=False, description="Whether price data is stale")
+
+
+class BatchPriceRequest(BaseModel):
+    """Schema for batch price request."""
+
+    assets: List[dict] = Field(..., description="List of assets to fetch prices for")
+
+
+class BatchPriceResponse(BaseModel):
+    """Schema for batch price response."""
+
+    prices: List[PriceResponse] = Field(default_factory=list, description="Price results")

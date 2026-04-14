@@ -10,6 +10,7 @@ from app.models.portfolio import Portfolio
 from app.models.asset import Asset
 from app.models.transaction import Transaction
 from app.models.exchange_connection import ExchangeConnection
+from app.models.password_reset_token import PasswordResetToken
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "Asset",
     "Transaction",
     "ExchangeConnection",
+    "PasswordResetToken",
 ]
