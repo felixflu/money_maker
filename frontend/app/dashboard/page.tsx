@@ -16,7 +16,8 @@ function getAccessToken(): string | null {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (!stored) return null
   try {
-    return (JSON.parse(stored) as { accessToken: string }).accessToken
+    const parsed = JSON.parse(stored)
+    return parsed.accessToken || parsed.access_token || null
   } catch {
     return null
   }
