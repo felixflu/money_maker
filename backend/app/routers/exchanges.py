@@ -5,6 +5,8 @@ Provides endpoints for:
 - CRUD operations on exchange connections
 - Trade Republic integration
 - Coinbase integration
+- MEXC integration
+- Bitpanda integration
 - Syncing portfolio data and transactions
 - Validating connection credentials
 """
@@ -26,6 +28,8 @@ from app.schemas import (
     ExchangeConnectionDetailResponse,
     TradeRepublicSyncRequest,
     TradeRepublicSyncResponse,
+    CoinbaseSyncRequest,
+    CoinbaseSyncResponse,
     MexcSyncRequest,
     MexcSyncResponse,
     BitpandaSyncRequest,
@@ -46,11 +50,13 @@ from app.integrations.coinbase import (
     CoinbaseAPIError,
     CoinbaseAuthError,
     CoinbaseRateLimitError,
+)
 from app.integrations.mexc import (
     MexcClient,
     MexcAPIError,
     MexcAuthError,
     MexcRateLimitError,
+)
 from app.integrations.bitpanda import (
     BitpandaClient,
     BitpandaAPIError,
@@ -84,12 +90,6 @@ SUPPORTED_EXCHANGES = [
         name="coinbase",
         display_name="Coinbase",
         description="Popular cryptocurrency exchange for buying, selling, and storing crypto",
-        name="mexc",
-        display_name="MEXC",
-        description="Global cryptocurrency exchange with spot and futures trading",
-        name="bitpanda",
-        display_name="Bitpanda",
-        description="European cryptocurrency broker with crypto indices and metals",
         supported_features=[
             "portfolio_sync",
             "transaction_import",
@@ -99,11 +99,29 @@ SUPPORTED_EXCHANGES = [
         requires_api_secret=True,
         website_url="https://coinbase.com",
         docs_url="https://docs.exchanges/coinbase.md",
+    ),
+    SupportedExchange(
+        name="mexc",
+        display_name="MEXC",
+        description="Global cryptocurrency exchange with spot and futures trading",
+        supported_features=[
+            "portfolio_sync",
+            "transaction_import",
+            "crypto_holdings",
             "spot_trading",
         ],
         requires_api_secret=True,
         website_url="https://www.mexc.com",
         docs_url="https://docs.exchanges/mexc.md",
+    ),
+    SupportedExchange(
+        name="bitpanda",
+        display_name="Bitpanda",
+        description="European cryptocurrency broker with crypto indices and metals",
+        supported_features=[
+            "portfolio_sync",
+            "transaction_import",
+            "crypto_holdings",
             "fiat_wallets",
         ],
         requires_api_secret=False,
@@ -308,8 +326,16 @@ async def get_connection(
                 connection_valid, connection_error = client.validate_connection()
             elif connection.exchange_name == "coinbase":
                 client = CoinbaseClient(
+                    api_key=connection.api_key_encrypted,
+                    api_secret=connection.api_secret_encrypted,
+                )
+                connection_valid, connection_error = client.validate_connection()
             elif connection.exchange_name == "mexc":
                 client = MexcClient(
+                    api_key=connection.api_key_encrypted,
+                    api_secret=connection.api_secret_encrypted,
+                )
+                connection_valid, connection_error = client.validate_connection()
             elif connection.exchange_name == "bitpanda":
                 client = BitpandaClient(
                     api_key=connection.api_key_encrypted,
@@ -492,6 +518,44 @@ async def validate_connection(
 
         elif validation_data.exchange_name == "coinbase":
             client = CoinbaseClient(
+                api_key=validation_data.api_key,
+                api_secret=validation_data.api_secret,
+            )
+            is_valid, error_message = client.validate_connection()
+
+            if is_valid:
+                account_info = client.get_account_info()
+                return ExchangeValidationResponse(
+                    valid=True,
+                    message="Connection successful",
+                    account_info=account_info,
+                )
+            else:
+                return ExchangeValidationResponse(
+                    valid=False,
+                    message=error_message or "Connection failed",
+                )
+
+        elif validation_data.exchange_name == "mexc":
+            client = MexcClient(
+                api_key=validation_data.api_key,
+                api_secret=validation_data.api_secret,
+            )
+            is_valid, error_message = client.validate_connection()
+
+            if is_valid:
+                account_info = client.get_account_info()
+                return ExchangeValidationResponse(
+                    valid=True,
+                    message="Connection successful",
+                    account_info=account_info,
+                )
+            else:
+                return ExchangeValidationResponse(
+                    valid=False,
+                    message=error_message or "Connection failed",
+                )
+
         elif validation_data.exchange_name == "bitpanda":
             client = BitpandaClient(
                 api_key=validation_data.api_key,
@@ -512,61 +576,17 @@ async def validate_connection(
                     message=error_message or "Connection failed",
                 )
 
-    except TradeRepublicAuthError as e:
+    except (TradeRepublicAuthError, CoinbaseAuthError, MexcAuthError, BitpandaAuthError) as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"Authentication failed: {e.message}",
         )
-    except TradeRepublicRateLimitError as e:
+    except (TradeRepublicRateLimitError, CoinbaseRateLimitError, MexcRateLimitError, BitpandaRateLimitError) as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
         )
-    except TradeRepublicAPIError as e:
-        return ExchangeValidationResponse(
-            valid=False,
-            message=f"API error: {e.message}",
-        )
-    except CoinbaseAuthError as e:
-
-    # MEXC validation
-    try:
-        if validation_data.exchange_name == "mexc":
-            client = MexcClient(
-                api_key=validation_data.api_key,
-                api_secret=validation_data.api_secret,
-            )
-            is_valid, error_message = client.validate_connection()
-
-            if is_valid:
-                account_info = client.get_account_info()
-                return ExchangeValidationResponse(
-                    valid=True,
-                    message="Connection successful",
-                    account_info=account_info,
-                )
-            else:
-                return ExchangeValidationResponse(
-                    valid=False,
-                    message=error_message or "Connection failed",
-                )
-
-    except MexcAuthError as e:
-    except BitpandaAuthError as e:
-        return ExchangeValidationResponse(
-            valid=False,
-            message=f"Authentication failed: {e.message}",
-        )
-    except CoinbaseRateLimitError as e:
-    except MexcRateLimitError as e:
-    except BitpandaRateLimitError as e:
-        return ExchangeValidationResponse(
-            valid=False,
-            message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
-        )
-    except CoinbaseAPIError as e:
-    except MexcAPIError as e:
-    except BitpandaAPIError as e:
+    except (TradeRepublicAPIError, CoinbaseAPIError, MexcAPIError, BitpandaAPIError) as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"API error: {e.message}",
@@ -683,20 +703,112 @@ async def sync_trade_republic(
 
 # ============================================================================
 # Coinbase Sync
-# MEXC Sync
-# Bitpanda Sync
 # ============================================================================
 
 
 @router.post(
     "/coinbase/sync/{connection_id}",
-    response_model=TradeRepublicSyncResponse,
+    response_model=CoinbaseSyncResponse,
     summary="Sync Coinbase data",
     description="Sync portfolio holdings and transactions from Coinbase.",
 )
 async def sync_coinbase(
     connection_id: int,
-    sync_request: TradeRepublicSyncRequest,
+    sync_request: CoinbaseSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Sync data from Coinbase.
+
+    - **connection_id**: ID of the Coinbase connection
+    - **sync_transactions**: Whether to sync transaction history (default: true)
+    - **transaction_days**: Number of days of history to sync (default: 90)
+
+    Returns sync results including counts of synced data.
+    """
+    # Get connection
+    connection = (
+        db.query(ExchangeConnection)
+        .filter(
+            ExchangeConnection.id == connection_id,
+            ExchangeConnection.user_id == current_user.id,
+            ExchangeConnection.exchange_name == "coinbase",
+        )
+        .first()
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coinbase connection not found",
+        )
+
+    if not connection.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connection is not active",
+        )
+
+    try:
+        # Create client and sync
+        client = CoinbaseClient(
+            api_key=connection.api_key_encrypted,
+            api_secret=connection.api_secret_encrypted,
+        )
+
+        result = client.sync_portfolio()
+
+        if result["success"]:
+            # Update last synced timestamp
+            from datetime import datetime
+
+            connection.last_synced_at = datetime.utcnow()
+            db.commit()
+
+            return CoinbaseSyncResponse(
+                success=True,
+                message="Sync completed successfully",
+                holdings_synced=len(result.get("holdings", [])),
+                transactions_synced=len(result.get("transactions", [])),
+                synced_at=connection.last_synced_at,
+            )
+        else:
+            return CoinbaseSyncResponse(
+                success=False,
+                message="Sync failed",
+                error=result.get("error", "Unknown error"),
+            )
+
+    except CoinbaseAuthError as e:
+        logger.error(f"Coinbase auth error during sync: {e}")
+        return CoinbaseSyncResponse(
+            success=False,
+            message="Authentication failed",
+            error=f"Invalid credentials: {e.message}",
+        )
+    except CoinbaseRateLimitError as e:
+        logger.error(f"Coinbase rate limit during sync: {e}")
+        return CoinbaseSyncResponse(
+            success=False,
+            message="Rate limit exceeded",
+            error=f"Retry after {e.retry_after} seconds",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during Coinbase sync: {e}")
+        return CoinbaseSyncResponse(
+            success=False,
+            message="Sync failed",
+            error=f"Unexpected error: {str(e)}",
+        )
+
+
+# ============================================================================
+# MEXC Sync
+# ============================================================================
+
+
+@router.post(
     "/mexc/sync/{connection_id}",
     response_model=MexcSyncResponse,
     summary="Sync MEXC data",
@@ -705,6 +817,100 @@ async def sync_coinbase(
 async def sync_mexc(
     connection_id: int,
     sync_request: MexcSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Sync data from MEXC.
+
+    - **connection_id**: ID of the MEXC connection
+    - **sync_transactions**: Whether to sync transaction history (default: true)
+    - **transaction_days**: Number of days of history to sync (default: 90)
+
+    Returns sync results including counts of synced data.
+    """
+    # Get connection
+    connection = (
+        db.query(ExchangeConnection)
+        .filter(
+            ExchangeConnection.id == connection_id,
+            ExchangeConnection.user_id == current_user.id,
+            ExchangeConnection.exchange_name == "mexc",
+        )
+        .first()
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="MEXC connection not found",
+        )
+
+    if not connection.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connection is not active",
+        )
+
+    try:
+        # Create client and sync
+        client = MexcClient(
+            api_key=connection.api_key_encrypted,
+            api_secret=connection.api_secret_encrypted,
+        )
+
+        result = client.sync_portfolio()
+
+        if result["success"]:
+            # Update last synced timestamp
+            from datetime import datetime
+
+            connection.last_synced_at = datetime.utcnow()
+            db.commit()
+
+            return MexcSyncResponse(
+                success=True,
+                message="Sync completed successfully",
+                holdings_synced=len(result.get("holdings", [])),
+                transactions_synced=len(result.get("transactions", [])),
+                synced_at=connection.last_synced_at,
+            )
+        else:
+            return MexcSyncResponse(
+                success=False,
+                message="Sync failed",
+                error=result.get("error", "Unknown error"),
+            )
+
+    except MexcAuthError as e:
+        logger.error(f"MEXC auth error during sync: {e}")
+        return MexcSyncResponse(
+            success=False,
+            message="Authentication failed",
+            error=f"Invalid credentials: {e.message}",
+        )
+    except MexcRateLimitError as e:
+        logger.error(f"MEXC rate limit during sync: {e}")
+        return MexcSyncResponse(
+            success=False,
+            message="Rate limit exceeded",
+            error=f"Retry after {e.retry_after} seconds",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during MEXC sync: {e}")
+        return MexcSyncResponse(
+            success=False,
+            message="Sync failed",
+            error=f"Unexpected error: {str(e)}",
+        )
+
+
+# ============================================================================
+# Bitpanda Sync
+# ============================================================================
+
+
+@router.post(
     "/bitpanda/sync/{connection_id}",
     response_model=BitpandaSyncResponse,
     summary="Sync Bitpanda data",
@@ -717,13 +923,6 @@ async def sync_bitpanda(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Sync data from Coinbase.
-
-    - **connection_id**: ID of the Coinbase connection
-    Sync data from MEXC.
-
-    - **connection_id**: ID of the MEXC connection
-    - **sync_transactions**: Whether to sync transaction history (default: true)
     Sync data from Bitpanda.
 
     - **connection_id**: ID of the Bitpanda connection
@@ -738,8 +937,6 @@ async def sync_bitpanda(
         .filter(
             ExchangeConnection.id == connection_id,
             ExchangeConnection.user_id == current_user.id,
-            ExchangeConnection.exchange_name == "coinbase",
-            ExchangeConnection.exchange_name == "mexc",
             ExchangeConnection.exchange_name == "bitpanda",
         )
         .first()
@@ -748,8 +945,6 @@ async def sync_bitpanda(
     if not connection:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Coinbase connection not found",
-            detail="MEXC connection not found",
             detail="Bitpanda connection not found",
         )
 
@@ -761,8 +956,6 @@ async def sync_bitpanda(
 
     try:
         # Create client and sync
-        client = CoinbaseClient(
-        client = MexcClient(
         client = BitpandaClient(
             api_key=connection.api_key_encrypted,
             api_secret=connection.api_secret_encrypted,
@@ -777,8 +970,6 @@ async def sync_bitpanda(
             connection.last_synced_at = datetime.utcnow()
             db.commit()
 
-            return TradeRepublicSyncResponse(
-            return MexcSyncResponse(
             return BitpandaSyncResponse(
                 success=True,
                 message="Sync completed successfully",
@@ -787,20 +978,12 @@ async def sync_bitpanda(
                 synced_at=connection.last_synced_at,
             )
         else:
-            return TradeRepublicSyncResponse(
-            return MexcSyncResponse(
             return BitpandaSyncResponse(
                 success=False,
                 message="Sync failed",
                 error=result.get("error", "Unknown error"),
             )
 
-    except CoinbaseAuthError as e:
-        logger.error(f"Coinbase auth error during sync: {e}")
-        return TradeRepublicSyncResponse(
-    except MexcAuthError as e:
-        logger.error(f"MEXC auth error during sync: {e}")
-        return MexcSyncResponse(
     except BitpandaAuthError as e:
         logger.error(f"Bitpanda auth error during sync: {e}")
         return BitpandaSyncResponse(
@@ -808,12 +991,6 @@ async def sync_bitpanda(
             message="Authentication failed",
             error=f"Invalid credentials: {e.message}",
         )
-    except CoinbaseRateLimitError as e:
-        logger.error(f"Coinbase rate limit during sync: {e}")
-        return TradeRepublicSyncResponse(
-    except MexcRateLimitError as e:
-        logger.error(f"MEXC rate limit during sync: {e}")
-        return MexcSyncResponse(
     except BitpandaRateLimitError as e:
         logger.error(f"Bitpanda rate limit during sync: {e}")
         return BitpandaSyncResponse(
@@ -822,10 +999,6 @@ async def sync_bitpanda(
             error=f"Retry after {e.retry_after} seconds",
         )
     except Exception as e:
-        logger.error(f"Unexpected error during Coinbase sync: {e}")
-        return TradeRepublicSyncResponse(
-        logger.error(f"Unexpected error during MEXC sync: {e}")
-        return MexcSyncResponse(
         logger.error(f"Unexpected error during Bitpanda sync: {e}")
         return BitpandaSyncResponse(
             success=False,

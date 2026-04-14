@@ -332,17 +332,25 @@ class TestCoinbaseTransactionImport:
             ]
         }
 
-        # Mock transactions response
-        mock_tx_response = Mock()
-        mock_tx_response.status_code = 200
-        mock_tx_response.json.return_value = {
+        # Mock transactions responses (separate objects to avoid shared dict mutation)
+        mock_tx_response_1 = Mock()
+        mock_tx_response_1.status_code = 200
+        mock_tx_response_1.json.return_value = {
             "data": [
                 {"id": "tx_001", "type": "buy", "created_at": "2024-01-15T10:30:00Z"},
             ]
         }
 
+        mock_tx_response_2 = Mock()
+        mock_tx_response_2.status_code = 200
+        mock_tx_response_2.json.return_value = {
+            "data": [
+                {"id": "tx_002", "type": "sell", "created_at": "2024-01-16T11:00:00Z"},
+            ]
+        }
+
         client._session.get = Mock(
-            side_effect=[mock_accounts_response, mock_tx_response, mock_tx_response]
+            side_effect=[mock_accounts_response, mock_tx_response_1, mock_tx_response_2]
         )
 
         transactions = client.get_all_transactions()
