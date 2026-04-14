@@ -5,6 +5,8 @@ import { ProtectedRoute } from '../ProtectedRoute'
 import { PortfolioWithPnL } from '../types'
 import { PnLChart } from '../components/PnLChart'
 import { AssetPnLTable } from '../components/AssetPnLTable'
+import { TransactionHistory } from '../components/TransactionHistory'
+import { Transaction } from '../types'
 
 async function fetchPortfolio(): Promise<PortfolioWithPnL> {
   await new Promise(resolve => setTimeout(resolve, 500))
@@ -16,6 +18,11 @@ async function fetchPortfolio(): Promise<PortfolioWithPnL> {
     totalPnLPercent: 0,
     assetPnL: []
   }
+}
+
+async function fetchTransactions(): Promise<Transaction[]> {
+  await new Promise(resolve => setTimeout(resolve, 500))
+  return []
 }
 
 function formatCurrency(value: number): string {
@@ -33,14 +40,19 @@ function formatPercentage(value: number): string {
 
 function DashboardContent() {
   const [portfolio, setPortfolio] = useState<PortfolioWithPnL | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadPortfolio() {
+    async function loadData() {
       try {
-        const data = await fetchPortfolio()
-        setPortfolio(data)
+        const [portfolioData, transactionData] = await Promise.all([
+          fetchPortfolio(),
+          fetchTransactions(),
+        ])
+        setPortfolio(portfolioData)
+        setTransactions(transactionData)
       } catch (err) {
         setError('Failed to load portfolio data')
       } finally {
@@ -48,7 +60,7 @@ function DashboardContent() {
       }
     }
 
-    loadPortfolio()
+    loadData()
   }, [])
 
   if (isLoading) {
@@ -122,7 +134,7 @@ function DashboardContent() {
         </div>
       </section>
 
-      <section>
+      <section style={{ marginBottom: '2rem' }}>
         <h2>Holdings</h2>
 
         {isEmpty ? (
@@ -193,6 +205,17 @@ function DashboardContent() {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section
+        style={{
+          padding: '1.5rem',
+          backgroundColor: '#fff',
+          borderRadius: '8px',
+          border: '1px solid #e5e5e5'
+        }}
+      >
+        <TransactionHistory transactions={transactions} />
       </section>
     </div>
   )

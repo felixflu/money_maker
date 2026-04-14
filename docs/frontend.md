@@ -54,6 +54,46 @@ Totals row aggregates cost basis, current value, realized, unrealized, and total
 
 **Empty state:** Shown when `assets.length === 0`. Displays `data-testid="asset-pnl-empty"`.
 
+#### `TransactionHistory` (`app/components/TransactionHistory.tsx`)
+
+Paginated transaction history table with filtering and CSV export.
+
+**Props:**
+```ts
+interface TransactionHistoryProps {
+  transactions: Transaction[]
+  pageSize?: number  // default: 10
+}
+```
+
+**Filtering:**
+- Exchange: dropdown populated from transaction data
+- Asset: dropdown populated from transaction data
+- Date range: from/to date inputs
+- Filters combine with AND logic
+- Changing any filter resets pagination to page 1
+- Clear Filters button shown when any filter is active
+
+**Pagination:**
+- Client-side pagination over filtered results
+- Previous/Next buttons with disabled state at boundaries
+- Page indicator: "Page X of Y"
+- Configurable page size via `pageSize` prop
+
+**CSV Export:**
+- Exports filtered transactions (not just current page)
+- Columns: Exchange, Asset, Symbol, Type, Quantity, Price, Total, Date, Status
+- Filename: `transactions_YYYY-MM-DD.csv`
+- Creates temporary Blob URL, triggers download, revokes URL
+
+**Empty states:**
+- No transactions: `data-testid="empty-transactions"` — "No transactions found."
+- No filter results: same testid — "No transactions found matching your filters."
+
+**Type/Status badges:** Color-coded inline badges:
+- Type: buy (green), sell (red), other (grey)
+- Status: completed (green), pending (yellow), failed (red)
+
 ### Testing Charts
 
 Recharts uses `ResizeObserver` internally. Mock `ResponsiveContainer` in jsdom tests:
@@ -70,6 +110,6 @@ jest.mock('recharts', () => {
 })
 ```
 
-Test files: `__tests__/pnl-chart.test.tsx`, `__tests__/asset-pnl-table.test.tsx`
+Test files: `__tests__/pnl-chart.test.tsx`, `__tests__/asset-pnl-table.test.tsx`, `__tests__/transaction-history.test.tsx`
 
-Coverage areas: render with data, empty state, date range selection, P&L calculations, totals.
+Coverage areas: render with data, empty state, date range selection, P&L calculations, totals, pagination, filtering, CSV export.
