@@ -14,9 +14,9 @@ describe('Home', () => {
     expect(welcomeText).toBeInTheDocument()
   })
 
-  it('renders frontend status', () => {
+  it('renders login and register links', () => {
     render(<Home />)
-    const statusText = screen.getByText(/frontend is running successfully/i)
-    expect(statusText).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /login/i })).toHaveAttribute('href', '/login')
+    expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register')
   })
 })
