@@ -5,6 +5,7 @@ FastAPI backend application main entry point.
 from fastapi import FastAPI, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 import os
 
@@ -47,7 +48,7 @@ async def health_check_db(db: Session = Depends(get_db)):
     """Health check endpoint that verifies database connectivity."""
     try:
         # Execute a simple query to verify connection
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return JSONResponse(
