@@ -188,7 +188,7 @@ export function PnLChart({ data, initialValue = 0 }: PnLChartProps) {
               width={70}
             />
             <Tooltip
-              formatter={(value: number) => [formatCurrency(value), 'Value']}
+              formatter={(value) => [formatCurrency(value as number), 'Value']}
               labelFormatter={(label) => new Date(label).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
