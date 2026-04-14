@@ -372,8 +372,7 @@ class TestPriceEndpoints:
             "is_stale": False,
         }
 
-        async with async_client as client:
-            response = await client.get("/api/v1/prices/BTC?asset_type=cryptocurrency")
+        response = await async_client.get("/api/v1/prices/BTC?asset_type=cryptocurrency")
 
         assert response.status_code == 200
         data = response.json()
@@ -387,10 +386,9 @@ class TestPriceEndpoints:
         """Test price endpoint returns 404 when price not available."""
         mock_get_price.return_value = None
 
-        async with async_client as client:
-            response = await client.get(
-                "/api/v1/prices/UNKNOWN?asset_type=cryptocurrency"
-            )
+        response = await async_client.get(
+            "/api/v1/prices/UNKNOWN?asset_type=cryptocurrency"
+        )
 
         assert response.status_code == 404
 
@@ -403,16 +401,15 @@ class TestPriceEndpoints:
             "ETH": {"symbol": "ETH", "price": Decimal("3500.75"), "currency": "USD"},
         }
 
-        async with async_client as client:
-            response = await client.post(
-                "/api/v1/prices/batch",
-                json={
-                    "assets": [
-                        {"symbol": "BTC", "asset_type": "cryptocurrency"},
-                        {"symbol": "ETH", "asset_type": "cryptocurrency"},
-                    ]
-                },
-            )
+        response = await async_client.post(
+            "/api/v1/prices/batch",
+            json={
+                "assets": [
+                    {"symbol": "BTC", "asset_type": "cryptocurrency"},
+                    {"symbol": "ETH", "asset_type": "cryptocurrency"},
+                ]
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()

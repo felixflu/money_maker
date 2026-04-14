@@ -31,7 +31,6 @@ class PriceCache:
         entry = self._cache[key]
         timestamp = entry.get("timestamp")
         if timestamp and (datetime.now() - timestamp).total_seconds() > self.ttl_seconds:
-            del self._cache[key]
             return None
         return entry
 
