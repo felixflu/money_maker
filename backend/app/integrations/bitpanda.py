@@ -197,6 +197,13 @@ class BitpandaClient:
                 f"Request failed: {e}",
                 status_code=500,
             )
+        except BitpandaAPIError:
+            raise
+        except Exception as e:
+            raise BitpandaAPIError(
+                f"Unexpected error: {e}",
+                status_code=500,
+            )
 
     def get_account_info(self) -> dict[str, Any]:
         """

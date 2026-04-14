@@ -15,6 +15,13 @@ from app.integrations.mexc import (
     MexcAPIError,
     MexcAuthError,
     MexcRateLimitError,
+)
+from app.integrations.coinbase import (
+    CoinbaseClient,
+    CoinbaseAPIError,
+    CoinbaseAuthError,
+    CoinbaseRateLimitError,
+)
 from app.integrations.bitpanda import (
     BitpandaClient,
     BitpandaAPIError,
@@ -31,6 +38,10 @@ __all__ = [
     "MexcAPIError",
     "MexcAuthError",
     "MexcRateLimitError",
+    "CoinbaseClient",
+    "CoinbaseAPIError",
+    "CoinbaseAuthError",
+    "CoinbaseRateLimitError",
     "BitpandaClient",
     "BitpandaAPIError",
     "BitpandaAuthError",
