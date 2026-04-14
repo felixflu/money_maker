@@ -350,7 +350,7 @@ class TestMexcErrorHandling:
         with pytest.raises(MexcRateLimitError) as exc_info:
             client.get_holdings()
 
-        assert "IP banned" in str(exc_info.value).lower()
+        assert "ip banned" in str(exc_info.value).lower()
 
 
 class TestMexcSyncService:
@@ -400,9 +400,9 @@ class TestMexcSyncService:
         }
 
         # Set up mock to return different responses for different calls
+        # sync_portfolio calls get_holdings (account endpoint) then get_transactions
         client._session.get = Mock(
             side_effect=[
-                mock_account_response,
                 mock_holdings_response,
                 mock_tx_response,
             ]
