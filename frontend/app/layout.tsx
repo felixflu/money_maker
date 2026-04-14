@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { AuthProvider } from './AuthContext'
+import { AppShell } from './components/AppShell'
 
 export const metadata: Metadata = {
   title: 'Money Maker',
@@ -13,9 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body style={{ margin: 0 }}>
         <AuthProvider>
-          {children}
+          <AppShell>
+            {children}
+          </AppShell>
         </AuthProvider>
       </body>
     </html>
