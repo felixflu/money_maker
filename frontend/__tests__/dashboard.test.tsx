@@ -11,6 +11,18 @@ jest.mock('next/navigation', () => ({
   }),
 }))
 
+// Mock global fetch to return empty portfolio data (no API server in tests)
+beforeEach(() => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => [],
+  }) as jest.Mock
+})
+
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 describe('Dashboard', () => {
   beforeEach(() => {
     localStorage.clear()
