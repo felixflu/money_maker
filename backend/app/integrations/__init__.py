@@ -28,6 +28,12 @@ from app.integrations.bitpanda import (
     BitpandaAuthError,
     BitpandaRateLimitError,
 )
+from app.integrations.wealthapi import (
+    WealthApiClient,
+    WealthApiError,
+    WealthApiAuthError,
+    WealthApiRateLimitError,
+)
 
 __all__ = [
     "TradeRepublicClient",
@@ -46,4 +52,8 @@ __all__ = [
     "BitpandaAPIError",
     "BitpandaAuthError",
     "BitpandaRateLimitError",
+    "WealthApiClient",
+    "WealthApiError",
+    "WealthApiAuthError",
+    "WealthApiRateLimitError",
 ]
