@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
+    # WealthAPI
+    wealthapi_client_id: str = Field(default="", alias="WEALTHAPI_CLIENT_ID")
+    wealthapi_client_secret: str = Field(default="", alias="WEALTHAPI_CLIENT_SECRET")
+    wealthapi_base_url: str = Field(
+        default="https://sandbox.wealthapi.eu", alias="WEALTHAPI_BASE_URL"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -33,6 +33,9 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/money_maker}
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost}
+      - WEALTHAPI_CLIENT_ID=${WEALTHAPI_CLIENT_ID:-}
+      - WEALTHAPI_CLIENT_SECRET=${WEALTHAPI_CLIENT_SECRET:-}
+      - WEALTHAPI_BASE_URL=${WEALTHAPI_BASE_URL:-https://sandbox.wealthapi.eu}
     ports:
       - "8000:8000"
     volumes:

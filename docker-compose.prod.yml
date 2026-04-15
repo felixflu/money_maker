@@ -32,6 +32,9 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
+      - WEALTHAPI_CLIENT_ID=${WEALTHAPI_CLIENT_ID}
+      - WEALTHAPI_CLIENT_SECRET=${WEALTHAPI_CLIENT_SECRET}
+      - WEALTHAPI_BASE_URL=${WEALTHAPI_BASE_URL}
     depends_on:
       db:
         condition: service_healthy
