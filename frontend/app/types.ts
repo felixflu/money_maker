@@ -60,6 +60,28 @@ export interface AssetPnL {
   pnlPercent: number
 }
 
+export interface SupportedExchange {
+  name: string
+  display_name: string
+  description: string
+  supported_features: string[]
+  requires_api_secret: boolean
+  website_url: string | null
+  docs_url: string | null
+}
+
+export interface ExchangeConnection {
+  id: number
+  user_id: number
+  exchange_name: string
+  is_active: boolean
+  additional_config: string | null
+  last_synced_at: string | null
+  created_at: string
+  updated_at: string
+  api_key_masked: string | null
+}
+
 export interface PortfolioWithPnL extends Portfolio {
   pnlHistory: PnLDataPoint[]
   totalPnL: number
