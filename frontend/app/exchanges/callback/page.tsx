@@ -75,7 +75,7 @@ function CallbackContent() {
     if (processId) {
       let cancelled = false
 
-      async function poll() {
+      const poll = async () => {
         const status = await pollSyncStatus()
         if (!cancelled && status === 'RUNNING') {
           setTimeout(poll, POLL_INTERVAL_MS)
