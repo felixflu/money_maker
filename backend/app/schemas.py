@@ -504,6 +504,21 @@ class UpdateProcessResponse(BaseModel):
     error: Optional[str] = None
 
 
+class HoldingsSyncResponse(BaseModel):
+    """Schema for holdings sync response."""
+
+    success: bool
+    message: str
+    holdings_synced: int = Field(default=0, description="Number of holdings synced")
+    portfolio_id: Optional[int] = Field(
+        default=None, description="Portfolio ID containing synced holdings"
+    )
+    synced_at: Optional[datetime] = Field(default=None, description="Sync timestamp")
+    error: Optional[str] = Field(
+        default=None, description="Error message if sync failed"
+    )
+
+
 # ============================================================================
 # Exchange Validation Schemas
 # ============================================================================

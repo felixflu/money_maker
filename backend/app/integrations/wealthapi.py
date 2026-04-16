@@ -509,6 +509,98 @@ class WealthApiClient:
         """
         return self.get(f"bankConnections/updateProcess/{process_id}")
 
+    # =========================================================================
+    # Account & Holdings Management (v2/accounts)
+    # =========================================================================
+
+    def list_accounts(
+        self,
+        account_type: Optional[str] = None,
+        account_ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        List accounts, optionally filtered by type.
+
+        Args:
+            account_type: Filter by account type (e.g. DEPOT, CHECKING)
+            account_ids: Filter by specific account IDs
+
+        Returns:
+            Dict with 'accounts' list
+        """
+        params: dict[str, str] = {}
+        if account_type:
+            params["accountType"] = account_type
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        return self.get("accounts", params=params if params else None)
+
+    def get_account(self, account_id: str) -> dict[str, Any]:
+        """
+        Get details of a specific account including investments.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            Account details with investments list
+        """
+        return self.get(f"accounts/{account_id}")
+
+    def get_account_valuation(
+        self,
+        account_ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        Get total valuation across accounts.
+
+        Args:
+            account_ids: Optional list of account IDs to include
+
+        Returns:
+            Valuation data with totalValue
+        """
+        params: dict[str, str] = {}
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        return self.get("accounts/valuation", params=params if params else None)
+
+    def get_account_balances(
+        self,
+        account_ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        Get balance history for accounts.
+
+        Args:
+            account_ids: Optional list of account IDs
+
+        Returns:
+            Balance history data
+        """
+        params: dict[str, str] = {}
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        return self.get("accounts/balances", params=params if params else None)
+
+    def get_account_categorization(
+        self,
+        account_ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        Get asset categorization breakdown.
+
+        Args:
+            account_ids: Optional list of account IDs
+
+        Returns:
+            Categorization data with category breakdown
+        """
+        params: dict[str, str] = {}
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        return self.get("accounts/categorize", params=params if params else None)
+
     def validate_connection(self) -> tuple[bool, Optional[str]]:
         """
         Validate the mandator credentials are working.

@@ -15,11 +15,16 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timezone
+from decimal import Decimal
+
 from app.database import get_db
 from app.auth import get_current_user
 from app.config import settings
 from app.models import User
 from app.models.bank_connection import BankConnection
+from app.models.portfolio import Portfolio
+from app.models.asset import Asset
 from app.integrations.wealthapi import (
     WealthApiClient,
     WealthApiError,
@@ -33,6 +38,7 @@ from app.schemas import (
     BankConnectionUpdateResponse,
     WebFormFlowResponse,
     UpdateProcessResponse,
+    HoldingsSyncResponse,
 )
 
 router = APIRouter(prefix="/api/v1/bank-connections", tags=["bank-connections"])
@@ -339,4 +345,185 @@ async def poll_update_process(
         progress=result.get("progress"),
         bank_connection_id=result.get("bankConnectionId"),
         error=result.get("error"),
+    )
+
+
+def _infer_asset_type(security_name: str) -> str:
+    """Infer asset type from security name."""
+    name_lower = security_name.lower()
+    if any(kw in name_lower for kw in ("etf", "ucits", "ishares", "vanguard", "xtrackers")):
+        return "etf"
+    if any(kw in name_lower for kw in ("bond", "anleihe", "treasury")):
+        return "bond"
+    if any(kw in name_lower for kw in ("fund", "fonds")):
+        return "fund"
+    return "stock"
+
+
+def _sync_investments_to_portfolio(
+    db: Session,
+    user_id: int,
+    bank_conn: BankConnection,
+    investments: list[dict],
+) -> tuple[Portfolio, int]:
+    """
+    Map WealthAPI investments to Portfolio/Asset records.
+
+    Creates or updates a portfolio for the bank connection,
+    then upserts assets by ISIN/symbol.
+
+    Returns:
+        Tuple of (portfolio, count of synced holdings)
+    """
+    portfolio_name = f"{bank_conn.bank_name} - Depot"
+
+    # Find or create portfolio for this bank connection
+    portfolio = (
+        db.query(Portfolio)
+        .filter(
+            Portfolio.user_id == user_id,
+            Portfolio.name == portfolio_name,
+        )
+        .first()
+    )
+    if not portfolio:
+        portfolio = Portfolio(user_id=user_id, name=portfolio_name)
+        db.add(portfolio)
+        db.flush()
+
+    synced = 0
+    for inv in investments:
+        isin = inv.get("isin", "")
+        symbol = isin or inv.get("wkn", f"UNKNOWN-{inv.get('id', '')}")
+        security_name = inv.get("securityName", "Unknown Security")
+
+        # Upsert asset by symbol within this portfolio
+        asset = (
+            db.query(Asset)
+            .filter(
+                Asset.portfolio_id == portfolio.id,
+                Asset.symbol == symbol,
+            )
+            .first()
+        )
+
+        quantity = Decimal(str(inv.get("quantity", 0)))
+        entry_quote = inv.get("entryQuote")
+        avg_price = Decimal(str(entry_quote)) if entry_quote is not None else None
+
+        if asset:
+            asset.quantity = quantity
+            asset.average_buy_price = avg_price
+            asset.name = security_name
+        else:
+            asset = Asset(
+                portfolio_id=portfolio.id,
+                symbol=symbol,
+                name=security_name,
+                asset_type=_infer_asset_type(security_name),
+                quantity=quantity,
+                average_buy_price=avg_price,
+            )
+            db.add(asset)
+
+        synced += 1
+
+    return portfolio, synced
+
+
+@router.post(
+    "/{connection_id}/sync-holdings",
+    response_model=HoldingsSyncResponse,
+    summary="Sync holdings from bank connection",
+)
+async def sync_holdings(
+    connection_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch accounts/investments from WealthAPI and sync to portfolio.
+
+    Finds DEPOT-type accounts for this bank connection, fetches their
+    investments, and maps them to our Portfolio/Asset model.
+    """
+    conn = (
+        db.query(BankConnection)
+        .filter(
+            BankConnection.id == connection_id,
+            BankConnection.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not conn:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bank connection not found",
+        )
+
+    if not conn.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bank connection is not active",
+        )
+
+    wapi = _get_wealthapi_client()
+
+    try:
+        accounts_resp = wapi.list_accounts(account_type="DEPOT")
+    except WealthApiError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"WealthAPI error: {e.message}",
+        )
+
+    # Filter to DEPOT accounts belonging to this bank connection
+    depot_accounts = [
+        acc for acc in accounts_resp.get("accounts", [])
+        if acc.get("bankConnectionId") == conn.wealthapi_connection_id
+        and acc.get("accountType") == "DEPOT"
+    ]
+
+    if not depot_accounts:
+        now = datetime.now(timezone.utc)
+        conn.last_synced_at = now
+        db.commit()
+        return HoldingsSyncResponse(
+            success=True,
+            message="No depot accounts found for this bank connection",
+            holdings_synced=0,
+            synced_at=now,
+        )
+
+    # Fetch investments from each depot account
+    all_investments: list[dict] = []
+    for acc in depot_accounts:
+        try:
+            detail = wapi.get_account(acc["id"])
+            all_investments.extend(detail.get("investments", []))
+        except WealthApiError as e:
+            logger.warning(
+                f"Failed to fetch account {acc['id']}: {e.message}"
+            )
+
+    portfolio, synced_count = _sync_investments_to_portfolio(
+        db, current_user.id, conn, all_investments
+    )
+
+    now = datetime.now(timezone.utc)
+    conn.last_synced_at = now
+    db.commit()
+    db.refresh(portfolio)
+
+    logger.info(
+        f"Synced {synced_count} holdings for bank connection {connection_id} "
+        f"into portfolio {portfolio.id}"
+    )
+
+    return HoldingsSyncResponse(
+        success=True,
+        message=f"Synced {synced_count} holdings from {conn.bank_name}",
+        holdings_synced=synced_count,
+        portfolio_id=portfolio.id,
+        synced_at=now,
     )
