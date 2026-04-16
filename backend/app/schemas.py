@@ -429,6 +429,82 @@ class BitpandaSyncResponse(BaseModel):
 
 
 # ============================================================================
+# WealthAPI Bank Connection Schemas
+# ============================================================================
+
+
+class BankConnectionCreate(BaseModel):
+    """Schema for initiating a new bank connection via WealthAPI."""
+
+    bank_id: int = Field(..., description="WealthAPI bank identifier")
+    redirect_url: Optional[str] = Field(
+        default=None, description="Redirect URL for web form auth flow"
+    )
+
+
+class BankConnectionResponse(BaseModel):
+    """Schema for bank connection response."""
+
+    id: int
+    user_id: int
+    wealthapi_connection_id: str
+    bank_name: str
+    bank_id: int
+    update_status: str
+    categorization_status: Optional[str] = None
+    is_active: bool
+    last_synced_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BankConnectionInitResponse(BaseModel):
+    """Schema for bank connection initiation response (includes web form URL)."""
+
+    bank_connection: BankConnectionResponse
+    web_form_url: Optional[str] = Field(
+        default=None, description="URL for bank authentication web form"
+    )
+    web_form_flow_id: Optional[str] = Field(
+        default=None, description="Web form flow ID for polling status"
+    )
+    process_id: Optional[str] = Field(
+        default=None, description="Process ID for polling sync status"
+    )
+
+
+class WebFormFlowResponse(BaseModel):
+    """Schema for web form flow status."""
+
+    id: str
+    status: str
+    service_url: Optional[str] = None
+    bank_connection_id: Optional[str] = None
+
+
+class BankConnectionUpdateResponse(BaseModel):
+    """Schema for bank connection update/refresh response."""
+
+    bank_connection: BankConnectionResponse
+    process_id: Optional[str] = None
+    web_form_url: Optional[str] = None
+    web_form_flow_id: Optional[str] = None
+
+
+class UpdateProcessResponse(BaseModel):
+    """Schema for bank sync process status."""
+
+    id: str
+    status: str
+    progress: Optional[int] = None
+    bank_connection_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+# ============================================================================
 # Exchange Validation Schemas
 # ============================================================================
 

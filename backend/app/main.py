@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 import os
 
-from app.routers import auth, exchanges, portfolio, prices
+from app.routers import auth, exchanges, portfolio, prices, bank_connections
 from app.models import init_db, get_db
 
 # Create FastAPI application
@@ -26,6 +26,7 @@ app.include_router(auth.router)
 app.include_router(exchanges.router)
 app.include_router(portfolio.router)
 app.include_router(prices.router)
+app.include_router(bank_connections.router)
 
 # Configure CORS
 app.add_middleware(

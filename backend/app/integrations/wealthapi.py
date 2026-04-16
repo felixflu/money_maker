@@ -392,6 +392,123 @@ class WealthApiClient:
         """Make an authenticated DELETE request."""
         return self._make_request("DELETE", endpoint)
 
+    # =========================================================================
+    # Bank Connection Management (v2/bankConnections)
+    # =========================================================================
+
+    def create_bank_connection(
+        self,
+        bank_id: int,
+        credentials: Optional[dict] = None,
+        redirect_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Initiate a new bank connection.
+
+        Args:
+            bank_id: WealthAPI bank identifier
+            credentials: Optional login credentials (loginName, password)
+            redirect_url: Optional redirect URL for web form auth flow
+
+        Returns:
+            BankSynchronizationProcess response with connection details
+        """
+        data: dict[str, Any] = {"bankId": bank_id}
+        if credentials:
+            data["credentials"] = credentials
+        if redirect_url:
+            data["redirectUrl"] = redirect_url
+        return self.post("bankConnections", data=data)
+
+    def list_bank_connections(
+        self,
+        ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        List existing bank connections.
+
+        Args:
+            ids: Optional list of connection IDs to filter by
+
+        Returns:
+            Dict with 'connections' list
+        """
+        params = {}
+        if ids:
+            params["ids"] = ",".join(ids)
+        return self.get("bankConnections", params=params if params else None)
+
+    def get_bank_connection(self, connection_id: str) -> dict[str, Any]:
+        """
+        Get details of a specific bank connection.
+
+        Args:
+            connection_id: Bank connection ID
+
+        Returns:
+            Bank connection details including accounts
+        """
+        return self.get(f"bankConnections/{connection_id}")
+
+    def get_web_form_flow(self, flow_id: str) -> dict[str, Any]:
+        """
+        Get web form flow status for bank authentication.
+
+        Args:
+            flow_id: Web form flow ID
+
+        Returns:
+            Web form flow status including serviceUrl for redirect
+        """
+        return self.get(f"bankConnections/webFormFlow/{flow_id}")
+
+    def update_bank_connection(
+        self,
+        connection_id: str,
+        redirect_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Refresh/sync an existing bank connection.
+
+        Args:
+            connection_id: Bank connection ID
+            redirect_url: Optional redirect URL for re-authentication
+
+        Returns:
+            Update process status
+        """
+        data: dict[str, Any] = {}
+        if redirect_url:
+            data["redirectUrl"] = redirect_url
+        return self.put(
+            f"bankConnections/{connection_id}/update",
+            data=data if data else None,
+        )
+
+    def delete_bank_connection(self, connection_id: str) -> dict[str, Any]:
+        """
+        Delete a bank connection.
+
+        Args:
+            connection_id: Bank connection ID
+
+        Returns:
+            Empty dict on success (204)
+        """
+        return self.delete(f"bankConnections/{connection_id}")
+
+    def poll_update_process(self, process_id: str) -> dict[str, Any]:
+        """
+        Poll for async bank sync process status.
+
+        Args:
+            process_id: Update process ID
+
+        Returns:
+            Process status with progress info
+        """
+        return self.get(f"bankConnections/updateProcess/{process_id}")
+
     def validate_connection(self) -> tuple[bool, Optional[str]]:
         """
         Validate the mandator credentials are working.
