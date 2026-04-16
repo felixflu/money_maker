@@ -14,22 +14,19 @@ from app.auth import (
     create_password_reset_token,
     decode_token,
 )
-from app.database import Base, engine
 from app.models import User, PasswordResetToken
+from tests.conftest import TestSession
 
 
 @pytest.fixture(scope="function")
 async def async_client():
-    """Create an async test client with isolated database."""
-    # Create tables
-    Base.metadata.create_all(bind=engine)
+    """Create an async test client with isolated database.
 
+    Table creation/teardown is handled by conftest.setup_test_db (autouse).
+    """
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-
-    # Drop tables after test
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -434,9 +431,7 @@ class TestPasswordResetRequest:
     @pytest.mark.asyncio
     async def test_password_reset_request_creates_token(self, async_client, test_user):
         """Test that password reset request creates a token in database."""
-        from app.database import SessionLocal
-
-        db = SessionLocal()
+        db = TestSession()
         user = db.query(User).filter(User.email == test_user["email"]).first()
 
         # Create token directly
@@ -463,9 +458,7 @@ class TestPasswordResetConfirm:
     async def reset_token(self, async_client, test_user):
         """Create a password reset token for testing."""
         from sqlalchemy.orm import Session
-        from app.database import SessionLocal
-
-        db = SessionLocal()
+        db = TestSession()
         user = db.query(User).filter(User.email == test_user["email"]).first()
         token = create_password_reset_token(db, user.id)
         db.close()
@@ -518,10 +511,9 @@ class TestPasswordResetConfirm:
     async def test_password_reset_expired_token(self, async_client, test_user):
         """Test password reset with expired token."""
         from sqlalchemy.orm import Session
-        from app.database import SessionLocal
         import secrets
 
-        db = SessionLocal()
+        db = TestSession()
         user = db.query(User).filter(User.email == test_user["email"]).first()
 
         # Create an expired token directly
@@ -553,9 +545,7 @@ class TestPasswordResetConfirm:
     async def test_password_reset_used_token(self, async_client, test_user):
         """Test password reset with already used token."""
         from sqlalchemy.orm import Session
-        from app.database import SessionLocal
-
-        db = SessionLocal()
+        db = TestSession()
         user = db.query(User).filter(User.email == test_user["email"]).first()
 
         # Create a token and mark it as used

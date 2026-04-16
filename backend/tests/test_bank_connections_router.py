@@ -10,51 +10,29 @@ from datetime import datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.models.base import Base
 from app.models.user import User
 from app.models.bank_connection import BankConnection
-from app.database import get_db
 from app.auth import get_current_user
 from app.main import app
-
-
-# Test database setup
-engine = create_engine(
-    "sqlite://",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_test_db():
-    db = TestSession()
-    try:
-        yield db
-    finally:
-        db.close()
+from tests.conftest import TestSession
 
 
 def get_test_user():
     return User(id=1, email="test@example.com", hashed_password="hashed", is_active=True)
 
 
-app.dependency_overrides[get_db] = get_test_db
-app.dependency_overrides[get_current_user] = get_test_user
-
-client = TestClient(app)
-
-
 @pytest.fixture(autouse=True)
-def setup_db():
-    """Create tables before each test, drop after."""
-    Base.metadata.create_all(bind=engine)
+def override_auth():
+    """Override auth dependency for all tests in this module."""
+    app.dependency_overrides[get_current_user] = get_test_user
     yield
-    Base.metadata.drop_all(bind=engine)
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
+def client():
+    return TestClient(app)
 
 
 def _seed_user():
@@ -98,7 +76,7 @@ class TestCreateBankConnection:
     """Tests for POST /api/v1/bank-connections."""
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_create_success(self, mock_get_client):
+    def test_create_success(self, mock_get_client, client):
         _seed_user()
         mock_client = Mock()
         mock_client.create_bank_connection.return_value = {
@@ -123,7 +101,7 @@ class TestCreateBankConnection:
         assert data["bank_connection"]["bank_id"] == 277672
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_create_with_web_form(self, mock_get_client):
+    def test_create_with_web_form(self, mock_get_client, client):
         _seed_user()
         mock_client = Mock()
         mock_client.create_bank_connection.return_value = {
@@ -150,7 +128,7 @@ class TestCreateBankConnection:
         assert data["web_form_flow_id"] == "wf-abc"
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_create_wealthapi_auth_error(self, mock_get_client):
+    def test_create_wealthapi_auth_error(self, mock_get_client, client):
         _seed_user()
         mock_client = Mock()
         from app.integrations.wealthapi import WealthApiAuthError
@@ -167,7 +145,7 @@ class TestCreateBankConnection:
         assert response.status_code == 401
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_create_wealthapi_rate_limit(self, mock_get_client):
+    def test_create_wealthapi_rate_limit(self, mock_get_client, client):
         _seed_user()
         mock_client = Mock()
         from app.integrations.wealthapi import WealthApiRateLimitError
@@ -187,13 +165,13 @@ class TestCreateBankConnection:
 class TestListBankConnections:
     """Tests for GET /api/v1/bank-connections."""
 
-    def test_list_empty(self):
+    def test_list_empty(self, client):
         _seed_user()
         response = client.get("/api/v1/bank-connections")
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_list_with_connections(self):
+    def test_list_with_connections(self, client):
         conn_id = _seed_bank_connection()
         response = client.get("/api/v1/bank-connections")
         assert response.status_code == 200
@@ -206,7 +184,7 @@ class TestListBankConnections:
 class TestGetBankConnection:
     """Tests for GET /api/v1/bank-connections/{id}."""
 
-    def test_get_success(self):
+    def test_get_success(self, client):
         conn_id = _seed_bank_connection()
         response = client.get(f"/api/v1/bank-connections/{conn_id}")
         assert response.status_code == 200
@@ -214,7 +192,7 @@ class TestGetBankConnection:
         assert data["bank_name"] == "Deutsche Bank"
         assert data["bank_id"] == 277672
 
-    def test_get_not_found(self):
+    def test_get_not_found(self, client):
         _seed_user()
         response = client.get("/api/v1/bank-connections/999")
         assert response.status_code == 404
@@ -224,7 +202,7 @@ class TestWebFormFlow:
     """Tests for GET /api/v1/bank-connections/web-form/{flow_id}."""
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_get_web_form_status(self, mock_get_client):
+    def test_get_web_form_status(self, mock_get_client, client):
         mock_client = Mock()
         mock_client.get_web_form_flow.return_value = {
             "id": "wf-1",
@@ -240,7 +218,7 @@ class TestWebFormFlow:
         assert data["service_url"] == "https://sandbox.wealthapi.eu/webForm/wf-1"
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_get_web_form_completed(self, mock_get_client):
+    def test_get_web_form_completed(self, mock_get_client, client):
         mock_client = Mock()
         mock_client.get_web_form_flow.return_value = {
             "id": "wf-1",
@@ -260,7 +238,7 @@ class TestUpdateBankConnection:
     """Tests for PUT /api/v1/bank-connections/{id}/update."""
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_update_success(self, mock_get_client):
+    def test_update_success(self, mock_get_client, client):
         conn_id = _seed_bank_connection()
         mock_client = Mock()
         mock_client.update_bank_connection.return_value = {
@@ -276,13 +254,13 @@ class TestUpdateBankConnection:
         assert data["process_id"] == "proc-1"
         assert data["bank_connection"]["update_status"] == "IN_PROGRESS"
 
-    def test_update_not_found(self):
+    def test_update_not_found(self, client):
         _seed_user()
         response = client.put("/api/v1/bank-connections/999/update")
         assert response.status_code == 404
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_update_inactive_connection(self, mock_get_client):
+    def test_update_inactive_connection(self, mock_get_client, client):
         _seed_user()
         db = TestSession()
         conn = BankConnection(
@@ -306,7 +284,7 @@ class TestDeleteBankConnection:
     """Tests for DELETE /api/v1/bank-connections/{id}."""
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_delete_success(self, mock_get_client):
+    def test_delete_success(self, mock_get_client, client):
         conn_id = _seed_bank_connection()
         mock_client = Mock()
         mock_client.delete_bank_connection.return_value = {}
@@ -320,7 +298,7 @@ class TestDeleteBankConnection:
         assert get_response.status_code == 404
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_delete_wealthapi_fails_still_removes_local(self, mock_get_client):
+    def test_delete_wealthapi_fails_still_removes_local(self, mock_get_client, client):
         conn_id = _seed_bank_connection()
         mock_client = Mock()
         from app.integrations.wealthapi import WealthApiError
@@ -332,7 +310,7 @@ class TestDeleteBankConnection:
         response = client.delete(f"/api/v1/bank-connections/{conn_id}")
         assert response.status_code == 204
 
-    def test_delete_not_found(self):
+    def test_delete_not_found(self, client):
         _seed_user()
         response = client.delete("/api/v1/bank-connections/999")
         assert response.status_code == 404
@@ -342,7 +320,7 @@ class TestPollUpdateProcess:
     """Tests for GET /api/v1/bank-connections/process/{process_id}."""
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_poll_in_progress(self, mock_get_client):
+    def test_poll_in_progress(self, mock_get_client, client):
         mock_client = Mock()
         mock_client.poll_update_process.return_value = {
             "id": "proc-1",
@@ -358,7 +336,7 @@ class TestPollUpdateProcess:
         assert data["progress"] == 50
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_poll_completed(self, mock_get_client):
+    def test_poll_completed(self, mock_get_client, client):
         mock_client = Mock()
         mock_client.poll_update_process.return_value = {
             "id": "proc-1",
@@ -375,7 +353,7 @@ class TestPollUpdateProcess:
         assert data["bank_connection_id"] == "conn-123"
 
     @patch("app.routers.bank_connections._get_wealthapi_client")
-    def test_poll_failed(self, mock_get_client):
+    def test_poll_failed(self, mock_get_client, client):
         mock_client = Mock()
         mock_client.poll_update_process.return_value = {
             "id": "proc-1",
