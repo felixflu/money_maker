@@ -39,11 +39,12 @@ from app.schemas import (
     SupportedExchange,
     SupportedExchangesResponse,
 )
-from app.integrations.trade_republic import (
-    TradeRepublicClient,
-    TradeRepublicAPIError,
-    TradeRepublicAuthError,
-    TradeRepublicRateLimitError,
+from app.config import settings
+from app.integrations.wealthapi import (
+    WealthApiClient,
+    WealthApiError,
+    WealthApiAuthError,
+    WealthApiRateLimitError,
 )
 from app.integrations.coinbase import (
     CoinbaseClient,
@@ -145,6 +146,136 @@ async def list_supported_exchanges():
     features, requirements, and documentation links.
     """
     return SupportedExchangesResponse(exchanges=SUPPORTED_EXCHANGES)
+
+
+# ============================================================================
+# WealthAPI Helpers for Trade Republic
+# ============================================================================
+
+
+def _create_wealthapi_client() -> WealthApiClient:
+    """Create a WealthApiClient using app-level mandator credentials."""
+    return WealthApiClient(
+        client_id=settings.wealthapi_client_id,
+        client_secret=settings.wealthapi_client_secret,
+        base_url=settings.wealthapi_base_url,
+    )
+
+
+def _sync_trade_republic_via_wealthapi(connection) -> dict:
+    """
+    Sync Trade Republic data via WealthAPI.
+
+    Uses mandator credentials from settings and user credentials
+    from the exchange connection to login and fetch accounts/holdings.
+
+    Returns:
+        Dict with success, holdings_count, accounts_count, error keys.
+    """
+    try:
+        client = _create_wealthapi_client()
+        client.login(connection.api_key_encrypted, connection.api_secret_encrypted)
+
+        # Fetch bank connections
+        connections_data = client.get("connections")
+        bank_connections = connections_data.get("connections", [])
+
+        # Fetch accounts and holdings for each connection
+        all_holdings = []
+        all_accounts = []
+        for bank_conn in bank_connections:
+            conn_id = bank_conn.get("id")
+            if not conn_id:
+                continue
+            accounts_data = client.get(f"connections/{conn_id}/accounts")
+            accounts = accounts_data.get("accounts", [])
+            all_accounts.extend(accounts)
+            for account in accounts:
+                holdings = account.get("holdings", [])
+                all_holdings.extend(holdings)
+
+        return {
+            "success": True,
+            "holdings_count": len(all_holdings),
+            "accounts_count": len(all_accounts),
+            "holdings": all_holdings,
+            "accounts": all_accounts,
+        }
+
+    except WealthApiAuthError as e:
+        return {
+            "success": False,
+            "error": f"Authentication failed: {e.message}",
+            "holdings_count": 0,
+            "accounts_count": 0,
+        }
+    except WealthApiRateLimitError as e:
+        return {
+            "success": False,
+            "error": f"Rate limit exceeded. Retry after {e.retry_after} seconds",
+            "holdings_count": 0,
+            "accounts_count": 0,
+        }
+    except WealthApiError as e:
+        return {
+            "success": False,
+            "error": f"API error: {e.message}",
+            "holdings_count": 0,
+            "accounts_count": 0,
+        }
+
+
+def _validate_trade_republic_via_wealthapi(
+    api_key: str, api_secret: str
+) -> tuple[bool, Optional[str], Optional[dict]]:
+    """
+    Validate Trade Republic credentials via WealthAPI.
+
+    Attempts to login with user credentials using mandator-level auth.
+
+    Returns:
+        Tuple of (is_valid, error_message, account_info)
+    """
+    try:
+        client = _create_wealthapi_client()
+        client.login(api_key, api_secret)
+        account_info = client.get("user/me")
+        return True, None, account_info
+
+    except WealthApiAuthError as e:
+        return False, f"Authentication failed: {e.message}", None
+    except WealthApiRateLimitError as e:
+        return False, f"Rate limit exceeded. Retry after {e.retry_after} seconds", None
+    except WealthApiError as e:
+        return False, f"API error: {e.message}", None
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)}", None
+
+
+def _validate_connection_status(
+    exchange_name: str, api_key: str, api_secret: str
+) -> tuple[bool, Optional[str]]:
+    """
+    Validate connection credentials for any exchange.
+
+    For Trade Republic, uses WealthAPI. For others, uses native clients.
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if exchange_name == "trade_republic":
+        client = _create_wealthapi_client()
+        return client.validate_connection()
+    elif exchange_name == "coinbase":
+        client = CoinbaseClient(api_key=api_key, api_secret=api_secret)
+        return client.validate_connection()
+    elif exchange_name == "mexc":
+        client = MexcClient(api_key=api_key, api_secret=api_secret)
+        return client.validate_connection()
+    elif exchange_name == "bitpanda":
+        client = BitpandaClient(api_key=api_key, api_secret=api_secret)
+        return client.validate_connection()
+    return False, f"Unknown exchange: {exchange_name}"
 
 
 # ============================================================================
@@ -318,30 +449,11 @@ async def get_connection(
 
     if connection.is_active:
         try:
-            if connection.exchange_name == "trade_republic":
-                client = TradeRepublicClient(
-                    api_key=connection.api_key_encrypted,
-                    api_secret=connection.api_secret_encrypted,
-                )
-                connection_valid, connection_error = client.validate_connection()
-            elif connection.exchange_name == "coinbase":
-                client = CoinbaseClient(
-                    api_key=connection.api_key_encrypted,
-                    api_secret=connection.api_secret_encrypted,
-                )
-                connection_valid, connection_error = client.validate_connection()
-            elif connection.exchange_name == "mexc":
-                client = MexcClient(
-                    api_key=connection.api_key_encrypted,
-                    api_secret=connection.api_secret_encrypted,
-                )
-                connection_valid, connection_error = client.validate_connection()
-            elif connection.exchange_name == "bitpanda":
-                client = BitpandaClient(
-                    api_key=connection.api_key_encrypted,
-                    api_secret=connection.api_secret_encrypted,
-                )
-                connection_valid, connection_error = client.validate_connection()
+            connection_valid, connection_error = _validate_connection_status(
+                connection.exchange_name,
+                connection.api_key_encrypted,
+                connection.api_secret_encrypted,
+            )
         except Exception as e:
             connection_error = str(e)
             logger.error(f"Error validating connection {connection_id}: {e}")
@@ -497,14 +609,13 @@ async def validate_connection(
 
     try:
         if validation_data.exchange_name == "trade_republic":
-            client = TradeRepublicClient(
-                api_key=validation_data.api_key,
-                api_secret=validation_data.api_secret,
+            is_valid, error_message, account_info = (
+                _validate_trade_republic_via_wealthapi(
+                    validation_data.api_key,
+                    validation_data.api_secret,
+                )
             )
-            is_valid, error_message = client.validate_connection()
-
             if is_valid:
-                account_info = client.get_account_info()
                 return ExchangeValidationResponse(
                     valid=True,
                     message="Connection successful",
@@ -576,17 +687,17 @@ async def validate_connection(
                     message=error_message or "Connection failed",
                 )
 
-    except (TradeRepublicAuthError, CoinbaseAuthError, MexcAuthError, BitpandaAuthError) as e:
+    except (WealthApiAuthError, CoinbaseAuthError, MexcAuthError, BitpandaAuthError) as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"Authentication failed: {e.message}",
         )
-    except (TradeRepublicRateLimitError, CoinbaseRateLimitError, MexcRateLimitError, BitpandaRateLimitError) as e:
+    except (WealthApiRateLimitError, CoinbaseRateLimitError, MexcRateLimitError, BitpandaRateLimitError) as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"Rate limit exceeded. Retry after {e.retry_after} seconds",
         )
-    except (TradeRepublicAPIError, CoinbaseAPIError, MexcAPIError, BitpandaAPIError) as e:
+    except (WealthApiError, CoinbaseAPIError, MexcAPIError, BitpandaAPIError) as e:
         return ExchangeValidationResponse(
             valid=False,
             message=f"API error: {e.message}",
@@ -649,16 +760,9 @@ async def sync_trade_republic(
         )
 
     try:
-        # Create client and sync
-        client = TradeRepublicClient(
-            api_key=connection.api_key_encrypted,
-            api_secret=connection.api_secret_encrypted,
-        )
-
-        result = client.sync_portfolio()
+        result = _sync_trade_republic_via_wealthapi(connection)
 
         if result["success"]:
-            # Update last synced timestamp
             from datetime import datetime
 
             connection.last_synced_at = datetime.utcnow()
@@ -667,8 +771,8 @@ async def sync_trade_republic(
             return TradeRepublicSyncResponse(
                 success=True,
                 message="Sync completed successfully",
-                holdings_synced=len(result.get("holdings", [])),
-                transactions_synced=len(result.get("transactions", [])),
+                holdings_synced=result.get("holdings_count", 0),
+                transactions_synced=0,
                 synced_at=connection.last_synced_at,
             )
         else:
@@ -678,20 +782,6 @@ async def sync_trade_republic(
                 error=result.get("error", "Unknown error"),
             )
 
-    except TradeRepublicAuthError as e:
-        logger.error(f"Trade Republic auth error during sync: {e}")
-        return TradeRepublicSyncResponse(
-            success=False,
-            message="Authentication failed",
-            error=f"Invalid credentials: {e.message}",
-        )
-    except TradeRepublicRateLimitError as e:
-        logger.error(f"Trade Republic rate limit during sync: {e}")
-        return TradeRepublicSyncResponse(
-            success=False,
-            message="Rate limit exceeded",
-            error=f"Retry after {e.retry_after} seconds",
-        )
     except Exception as e:
         logger.error(f"Unexpected error during Trade Republic sync: {e}")
         return TradeRepublicSyncResponse(
