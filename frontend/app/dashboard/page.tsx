@@ -100,6 +100,20 @@ async function fetchPortfolio(): Promise<PortfolioWithPnL> {
   }
 }
 
+async function fetchPerformance(): Promise<{ pnlHistory: { date: string; value: number }[] }> {
+  const token = getAccessToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  try {
+    const response = await fetch('/api/v1/bank-connections/performance', { headers })
+    if (!response.ok) return { pnlHistory: [] }
+    return await response.json()
+  } catch {
+    return { pnlHistory: [] }
+  }
+}
+
 async function fetchTransactions(): Promise<Transaction[]> {
   // Transaction endpoint not yet available; return empty
   return []
@@ -129,12 +143,16 @@ function DashboardContent() {
 
     async function loadData() {
       try {
-        const [portfolioData, transactionData] = await Promise.all([
+        const [portfolioData, transactionData, perfData] = await Promise.all([
           fetchPortfolio(),
           fetchTransactions(),
+          fetchPerformance(),
         ])
         if (isMounted) {
-          setPortfolio(portfolioData)
+          setPortfolio({
+            ...portfolioData,
+            pnlHistory: perfData.pnlHistory,
+          })
           setTransactions(transactionData)
           setError(null)
         }
@@ -153,8 +171,10 @@ function DashboardContent() {
 
     // Auto-refresh prices every 30 seconds
     const interval = setInterval(() => {
-      fetchPortfolio()
-        .then(data => { if (isMounted) setPortfolio(data) })
+      Promise.all([fetchPortfolio(), fetchPerformance()])
+        .then(([data, perfData]) => {
+          if (isMounted) setPortfolio({ ...data, pnlHistory: perfData.pnlHistory })
+        })
         .catch(() => {})
     }, REFRESH_INTERVAL_MS)
 

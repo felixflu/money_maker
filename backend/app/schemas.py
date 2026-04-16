@@ -520,6 +520,48 @@ class HoldingsSyncResponse(BaseModel):
 
 
 # ============================================================================
+# WealthAPI Performance / Historic Valuations Schemas
+# ============================================================================
+
+
+class PnLDataPoint(BaseModel):
+    """Single data point for portfolio value time series."""
+
+    date: str = Field(..., description="Date in YYYY-MM-DD format")
+    value: float = Field(..., description="Portfolio value at this date")
+
+
+class AbsoluteReturnSummary(BaseModel):
+    """Summary of absolute return performance."""
+
+    totalReturn: float = Field(default=0.0, description="Total absolute return")
+    dividends: float = Field(default=0.0, description="Total dividends received")
+    expenses: float = Field(default=0.0, description="Total expenses/fees")
+
+
+class CashFlowEntry(BaseModel):
+    """Single cash flow entry."""
+
+    date: str = Field(..., description="Date of cash flow")
+    amount: float = Field(..., description="Cash flow amount")
+    type: str = Field(..., description="Cash flow type (DEPOSIT, WITHDRAWAL, etc.)")
+
+
+class PerformanceResponse(BaseModel):
+    """Response for bank connection performance data."""
+
+    pnlHistory: List[PnLDataPoint] = Field(
+        default_factory=list, description="Portfolio value time series"
+    )
+    absoluteReturn: Optional[AbsoluteReturnSummary] = Field(
+        default=None, description="Absolute return summary"
+    )
+    cashFlows: List[CashFlowEntry] = Field(
+        default_factory=list, description="Cash flow history"
+    )
+
+
+# ============================================================================
 # Exchange Validation Schemas
 # ============================================================================
 

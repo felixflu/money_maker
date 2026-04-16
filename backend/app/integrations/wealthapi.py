@@ -127,10 +127,11 @@ class WealthApiClient:
             return True
         return time.time() >= (self._token_expires_at - TOKEN_REFRESH_BUFFER_SECONDS)
 
-    def _build_url(self, endpoint: str) -> str:
+    def _build_url(self, endpoint: str, api_version: Optional[str] = None) -> str:
         """Build full API URL from endpoint."""
         endpoint = endpoint.lstrip("/")
-        return f"{self.base_url}/api/{self.API_VERSION}/{endpoint}"
+        version = api_version or self.API_VERSION
+        return f"{self.base_url}/api/{version}/{endpoint}"
 
     def _handle_response(self, response: requests.Response) -> dict[str, Any]:
         """Handle API response and raise appropriate exceptions."""
@@ -199,6 +200,7 @@ class WealthApiClient:
         data: Optional[dict] = None,
         params: Optional[dict] = None,
         authenticated: bool = True,
+        api_version: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Make an HTTP request to the WealthAPI.
@@ -209,6 +211,7 @@ class WealthApiClient:
             data: Request body for POST/PUT
             params: Query parameters
             authenticated: Whether to include user Bearer token
+            api_version: Override API version (e.g. "v1" for legacy endpoints)
 
         Returns:
             Parsed JSON response
@@ -216,7 +219,7 @@ class WealthApiClient:
         Raises:
             WealthApiError: On request failure
         """
-        url = self._build_url(endpoint)
+        url = self._build_url(endpoint, api_version=api_version)
 
         if authenticated:
             self._ensure_authenticated()
@@ -600,6 +603,103 @@ class WealthApiClient:
         if account_ids:
             params["accountIds"] = ",".join(account_ids)
         return self.get("accounts/categorize", params=params if params else None)
+
+    # =========================================================================
+    # Historic Valuations & Performance (v1 endpoints)
+    # =========================================================================
+
+    def get_historic_valuations(
+        self,
+        account_ids: Optional[list[str]] = None,
+        interval_type: Optional[str] = None,
+        start_date: Optional[str] = None,
+        include_cash: Optional[bool] = None,
+    ) -> dict[str, Any]:
+        """
+        Get historic valuations time series for accounts.
+
+        Args:
+            account_ids: Optional list of account IDs
+            interval_type: Interval granularity (day/week/month/year)
+            start_date: Start date (YYYY-MM-DD)
+            include_cash: Whether to include cash positions
+
+        Returns:
+            Dict with 'valuations' list of {date, totalValue} entries
+        """
+        params: dict[str, str] = {}
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        if interval_type:
+            params["intervalType"] = interval_type
+        if start_date:
+            params["startDate"] = start_date
+        if include_cash is not None:
+            params["includeCash"] = str(include_cash).lower()
+        return self._make_request(
+            "GET",
+            "accounts/historicValuations",
+            params=params if params else None,
+            api_version="v1",
+        )
+
+    def get_absolute_return(
+        self,
+        account_ids: Optional[list[str]] = None,
+        interval_type: Optional[str] = None,
+        start_date: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Get absolute return performance data with dividends and expenses.
+
+        Args:
+            account_ids: Optional list of account IDs
+            interval_type: Interval granularity (day/week/month/year)
+            start_date: Start date (YYYY-MM-DD)
+
+        Returns:
+            Dict with 'returns' list of {date, absoluteReturn, dividends, expenses}
+        """
+        params: dict[str, str] = {}
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        if interval_type:
+            params["intervalType"] = interval_type
+        if start_date:
+            params["startDate"] = start_date
+        return self._make_request(
+            "GET",
+            "performance/absoluteReturn",
+            params=params if params else None,
+            api_version="v1",
+        )
+
+    def get_cash_flows(
+        self,
+        account_ids: Optional[list[str]] = None,
+        start_date: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Get cash flow analysis for accounts.
+
+        Args:
+            account_ids: Optional list of account IDs
+            start_date: Start date (YYYY-MM-DD)
+
+        Returns:
+            Dict with 'cashFlows' list of {date, amount, type}
+        """
+        params: dict[str, str] = {}
+        if account_ids:
+            params["accountIds"] = ",".join(account_ids)
+        if start_date:
+            params["startDate"] = start_date
+        return self._make_request(
+            "GET",
+            "accounts/cashFlows",
+            params=params if params else None,
+            api_version="v1",
+        )
 
     def validate_connection(self) -> tuple[bool, Optional[str]]:
         """

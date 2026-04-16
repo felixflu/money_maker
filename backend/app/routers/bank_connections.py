@@ -39,6 +39,10 @@ from app.schemas import (
     WebFormFlowResponse,
     UpdateProcessResponse,
     HoldingsSyncResponse,
+    PerformanceResponse,
+    PnLDataPoint,
+    AbsoluteReturnSummary,
+    CashFlowEntry,
 )
 
 router = APIRouter(prefix="/api/v1/bank-connections", tags=["bank-connections"])
@@ -153,6 +157,118 @@ async def list_bank_connections(
         .all()
     )
     return [BankConnectionResponse.model_validate(c) for c in connections]
+
+
+@router.get(
+    "/performance",
+    response_model=PerformanceResponse,
+    summary="Get aggregated performance data across all bank connections",
+)
+async def get_aggregated_performance(
+    interval_type: str = "day",
+    start_date: str | None = None,
+    include_cash: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch historic valuations and performance data across all active
+    bank connections for the current user. Maps to PnLChart format.
+    """
+    connections = (
+        db.query(BankConnection)
+        .filter(
+            BankConnection.user_id == current_user.id,
+            BankConnection.is_active == True,
+        )
+        .all()
+    )
+
+    if not connections:
+        return PerformanceResponse(pnlHistory=[], absoluteReturn=None, cashFlows=[])
+
+    wapi = _get_wealthapi_client()
+
+    # Find all DEPOT accounts across all connections
+    try:
+        accounts_resp = wapi.list_accounts(account_type="DEPOT")
+    except WealthApiError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"WealthAPI error: {e.message}",
+        )
+
+    wapi_conn_ids = {c.wealthapi_connection_id for c in connections}
+    depot_account_ids = [
+        acc["id"]
+        for acc in accounts_resp.get("accounts", [])
+        if acc.get("bankConnectionId") in wapi_conn_ids
+        and acc.get("accountType") == "DEPOT"
+    ]
+
+    if not depot_account_ids:
+        return PerformanceResponse(pnlHistory=[], absoluteReturn=None, cashFlows=[])
+
+    # Fetch valuations
+    try:
+        valuations_resp = wapi.get_historic_valuations(
+            account_ids=depot_account_ids,
+            interval_type=interval_type,
+            start_date=start_date,
+            include_cash=include_cash,
+        )
+    except WealthApiError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"WealthAPI error: {e.message}",
+        )
+
+    pnl_history = [
+        PnLDataPoint(date=v["date"], value=v["totalValue"])
+        for v in valuations_resp.get("valuations", [])
+    ]
+
+    # Fetch absolute return (best-effort)
+    abs_return = None
+    try:
+        abs_resp = wapi.get_absolute_return(
+            account_ids=depot_account_ids,
+            interval_type=interval_type,
+            start_date=start_date,
+        )
+        returns = abs_resp.get("returns", [])
+        if returns:
+            abs_return = AbsoluteReturnSummary(
+                totalReturn=sum(r.get("absoluteReturn", 0) for r in returns),
+                dividends=sum(r.get("dividends", 0) for r in returns),
+                expenses=sum(r.get("expenses", 0) for r in returns),
+            )
+    except WealthApiError as e:
+        logger.warning(f"Failed to fetch absolute return: {e.message}")
+
+    # Fetch cash flows (best-effort)
+    cash_flows = []
+    try:
+        cf_resp = wapi.get_cash_flows(
+            account_ids=depot_account_ids,
+            start_date=start_date,
+        )
+        cash_flows = [
+            CashFlowEntry(
+                date=cf["date"],
+                amount=cf["amount"],
+                type=cf.get("type", "UNKNOWN"),
+            )
+            for cf in cf_resp.get("cashFlows", [])
+        ]
+    except WealthApiError as e:
+        logger.warning(f"Failed to fetch cash flows: {e.message}")
+
+    return PerformanceResponse(
+        pnlHistory=pnl_history,
+        absoluteReturn=abs_return,
+        cashFlows=cash_flows,
+    )
 
 
 @router.get(
@@ -526,4 +642,130 @@ async def sync_holdings(
         holdings_synced=synced_count,
         portfolio_id=portfolio.id,
         synced_at=now,
+    )
+
+
+@router.get(
+    "/{connection_id}/performance",
+    response_model=PerformanceResponse,
+    summary="Get performance data for bank connection",
+)
+async def get_performance(
+    connection_id: int,
+    interval_type: str = "day",
+    start_date: str | None = None,
+    include_cash: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch historic valuations and performance data from WealthAPI.
+
+    Returns portfolio value time series (pnlHistory), absolute return summary,
+    and cash flow history mapped to our frontend PnLChart format.
+    """
+    conn = (
+        db.query(BankConnection)
+        .filter(
+            BankConnection.id == connection_id,
+            BankConnection.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not conn:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bank connection not found",
+        )
+
+    if not conn.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bank connection is not active",
+        )
+
+    wapi = _get_wealthapi_client()
+
+    try:
+        accounts_resp = wapi.list_accounts(account_type="DEPOT")
+    except WealthApiError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"WealthAPI error: {e.message}",
+        )
+
+    depot_account_ids = [
+        acc["id"]
+        for acc in accounts_resp.get("accounts", [])
+        if acc.get("bankConnectionId") == conn.wealthapi_connection_id
+        and acc.get("accountType") == "DEPOT"
+    ]
+
+    if not depot_account_ids:
+        return PerformanceResponse(pnlHistory=[], absoluteReturn=None, cashFlows=[])
+
+    # Fetch all three data sources
+    try:
+        valuations_resp = wapi.get_historic_valuations(
+            account_ids=depot_account_ids,
+            interval_type=interval_type,
+            start_date=start_date,
+            include_cash=include_cash,
+        )
+    except WealthApiError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"WealthAPI error: {e.message}",
+        )
+
+    # Map valuations to PnLDataPoint format
+    pnl_history = [
+        PnLDataPoint(date=v["date"], value=v["totalValue"])
+        for v in valuations_resp.get("valuations", [])
+    ]
+
+    # Fetch absolute return (best-effort — don't fail if unavailable)
+    abs_return = None
+    try:
+        abs_resp = wapi.get_absolute_return(
+            account_ids=depot_account_ids,
+            interval_type=interval_type,
+            start_date=start_date,
+        )
+        returns = abs_resp.get("returns", [])
+        if returns:
+            # Aggregate across all return entries
+            total_return = sum(r.get("absoluteReturn", 0) for r in returns)
+            total_dividends = sum(r.get("dividends", 0) for r in returns)
+            total_expenses = sum(r.get("expenses", 0) for r in returns)
+            abs_return = AbsoluteReturnSummary(
+                totalReturn=total_return,
+                dividends=total_dividends,
+                expenses=total_expenses,
+            )
+    except WealthApiError as e:
+        logger.warning(f"Failed to fetch absolute return: {e.message}")
+
+    # Fetch cash flows (best-effort)
+    cash_flows = []
+    try:
+        cf_resp = wapi.get_cash_flows(
+            account_ids=depot_account_ids,
+            start_date=start_date,
+        )
+        cash_flows = [
+            CashFlowEntry(
+                date=cf["date"],
+                amount=cf["amount"],
+                type=cf.get("type", "UNKNOWN"),
+            )
+            for cf in cf_resp.get("cashFlows", [])
+        ]
+    except WealthApiError as e:
+        logger.warning(f"Failed to fetch cash flows: {e.message}")
+
+    return PerformanceResponse(
+        pnlHistory=pnl_history,
+        absoluteReturn=abs_return,
+        cashFlows=cash_flows,
     )
