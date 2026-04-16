@@ -82,6 +82,30 @@ export interface ExchangeConnection {
   api_key_masked: string | null
 }
 
+export interface BankConnectionInitiation {
+  id: string
+  web_form_url: string
+  process_id: string
+}
+
+export interface BankAccount {
+  id: string
+  name: string
+  iban: string
+  balance: number
+}
+
+export interface BankSyncStatus {
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  progress?: number
+  bank_connection_id?: string
+  accounts?: BankAccount[]
+  error?: string
+}
+
+// Exchanges that use WealthAPI bank redirect flow instead of API key/secret
+export const WEALTHAPI_REDIRECT_EXCHANGES = new Set(['trade_republic'])
+
 export interface PortfolioWithPnL extends Portfolio {
   pnlHistory: PnLDataPoint[]
   totalPnL: number
