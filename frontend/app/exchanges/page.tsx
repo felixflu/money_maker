@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { ProtectedRoute } from '../ProtectedRoute'
-import { SupportedExchange, ExchangeConnection } from '../types'
+import { SupportedExchange, ExchangeConnection, WEALTHAPI_REDIRECT_EXCHANGES } from '../types'
 
 const STORAGE_KEY = 'mm_auth_tokens'
 
@@ -37,6 +37,16 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleString()
 }
 
+function isBankConnection(connection: ExchangeConnection): boolean {
+  if (!connection.additional_config) return false
+  try {
+    const config = JSON.parse(connection.additional_config)
+    return config.connection_type === 'wealthapi'
+  } catch {
+    return false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Add Connection Form
 // ---------------------------------------------------------------------------
@@ -63,6 +73,36 @@ function AddConnectionForm({
 
   const selected = exchanges.find((e) => e.name === selectedExchange)
   const needsSecret = selected?.requires_api_secret ?? true
+  const isRedirectFlow = WEALTHAPI_REDIRECT_EXCHANGES.has(selectedExchange)
+  const [connecting, setConnecting] = useState(false)
+
+  async function handleBankConnect() {
+    setConnecting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/v1/wealthapi/bank-connections', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          exchange_name: selectedExchange,
+          callback_url: `${window.location.origin}/exchanges/callback`,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || `Failed: ${res.status}`)
+      }
+      const data = await res.json()
+      if (data.web_form_url) {
+        window.location.assign(data.web_form_url)
+      } else {
+        throw new Error('No web form URL returned')
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate bank connection')
+      setConnecting(false)
+    }
+  }
 
   async function handleValidate() {
     setValidating(true)
@@ -161,97 +201,134 @@ function AddConnectionForm({
         )}
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label htmlFor="api-key" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600, fontSize: '0.875rem' }}>
-          API Key
-        </label>
-        <input
-          id="api-key"
-          data-testid="api-key-input"
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          required
-          placeholder="Enter your API key"
-          style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.875rem', boxSizing: 'border-box' }}
-        />
-      </div>
+      {isRedirectFlow ? (
+        <>
+          <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#555' }}>
+            You will be redirected to your bank&apos;s login page to authorize the connection.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              type="button"
+              data-testid="bank-connect-btn"
+              onClick={handleBankConnect}
+              disabled={connecting}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#0070f3',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: connecting ? 'wait' : 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+              }}
+            >
+              {connecting ? 'Connecting...' : 'Connect via Bank'}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{ padding: '0.5rem 1rem', backgroundColor: '#e5e5e5', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ marginBottom: '1rem' }}>
+            <label htmlFor="api-key" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600, fontSize: '0.875rem' }}>
+              API Key
+            </label>
+            <input
+              id="api-key"
+              data-testid="api-key-input"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              required
+              placeholder="Enter your API key"
+              style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.875rem', boxSizing: 'border-box' }}
+            />
+          </div>
 
-      {needsSecret && (
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="api-secret" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600, fontSize: '0.875rem' }}>
-            API Secret
-          </label>
-          <input
-            id="api-secret"
-            data-testid="api-secret-input"
-            type="password"
-            value={apiSecret}
-            onChange={(e) => setApiSecret(e.target.value)}
-            required
-            placeholder="Enter your API secret"
-            style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.875rem', boxSizing: 'border-box' }}
-          />
-        </div>
+          {needsSecret && (
+            <div style={{ marginBottom: '1rem' }}>
+              <label htmlFor="api-secret" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600, fontSize: '0.875rem' }}>
+                API Secret
+              </label>
+              <input
+                id="api-secret"
+                data-testid="api-secret-input"
+                type="password"
+                value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)}
+                required
+                placeholder="Enter your API secret"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.875rem', boxSizing: 'border-box' }}
+              />
+            </div>
+          )}
+
+          {validationResult && (
+            <div
+              data-testid="validation-result"
+              style={{
+                padding: '0.75rem',
+                backgroundColor: validationResult.valid ? '#f0fdf4' : '#fef2f2',
+                color: validationResult.valid ? '#16a34a' : '#dc2626',
+                borderRadius: '4px',
+                marginBottom: '1rem',
+                fontSize: '0.875rem',
+              }}
+            >
+              {validationResult.message}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              type="button"
+              data-testid="validate-btn"
+              onClick={handleValidate}
+              disabled={validating || !apiKey || (needsSecret && !apiSecret)}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#f5f5f5',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                cursor: validating ? 'wait' : 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              {validating ? 'Validating...' : 'Validate'}
+            </button>
+            <button
+              type="submit"
+              data-testid="save-connection-btn"
+              disabled={submitting || !apiKey || (needsSecret && !apiSecret)}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#0070f3',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: submitting ? 'wait' : 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              {submitting ? 'Saving...' : 'Save Connection'}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{ padding: '0.5rem 1rem', backgroundColor: '#e5e5e5', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
       )}
-
-      {validationResult && (
-        <div
-          data-testid="validation-result"
-          style={{
-            padding: '0.75rem',
-            backgroundColor: validationResult.valid ? '#f0fdf4' : '#fef2f2',
-            color: validationResult.valid ? '#16a34a' : '#dc2626',
-            borderRadius: '4px',
-            marginBottom: '1rem',
-            fontSize: '0.875rem',
-          }}
-        >
-          {validationResult.message}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button
-          type="button"
-          data-testid="validate-btn"
-          onClick={handleValidate}
-          disabled={validating || !apiKey || (needsSecret && !apiSecret)}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#f5f5f5',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: validating ? 'wait' : 'pointer',
-            fontSize: '0.875rem',
-          }}
-        >
-          {validating ? 'Validating...' : 'Validate'}
-        </button>
-        <button
-          type="submit"
-          data-testid="save-connection-btn"
-          disabled={submitting || !apiKey || (needsSecret && !apiSecret)}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#0070f3',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: submitting ? 'wait' : 'pointer',
-            fontSize: '0.875rem',
-          }}
-        >
-          {submitting ? 'Saving...' : 'Save Connection'}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          style={{ padding: '0.5rem 1rem', backgroundColor: '#e5e5e5', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}
-        >
-          Cancel
-        </button>
-      </div>
     </form>
   )
 }
@@ -482,7 +559,11 @@ function ConnectionCard({
       </div>
 
       <div style={{ display: 'flex', gap: '2rem', fontSize: '0.8125rem', color: '#555', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-        <span>API Key: <code style={{ backgroundColor: '#f5f5f5', padding: '0.125rem 0.25rem', borderRadius: '2px' }}>{connection.api_key_masked || '****'}</code></span>
+        {isBankConnection(connection) ? (
+          <span style={{ color: '#16a34a', fontWeight: 600 }}>Bank Connected</span>
+        ) : (
+          <span>API Key: <code style={{ backgroundColor: '#f5f5f5', padding: '0.125rem 0.25rem', borderRadius: '2px' }}>{connection.api_key_masked || '****'}</code></span>
+        )}
         <span>Last synced: {formatDate(connection.last_synced_at)}</span>
         <span>Added: {formatDate(connection.created_at)}</span>
       </div>
